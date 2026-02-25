@@ -1,0 +1,1857 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PijamaKids — Tienda Premium</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --text-sec: #6e6e73;
+    --accent: #FF6B8A;
+    --accent2: #FF9F5B;
+    --blue: #0071e3;
+    --green: #30d158;
+    --yellow: #ffd60a;
+    --radius: 18px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    --shadow-hover: 0 12px 40px rgba(0,0,0,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .glass {
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d2d2d7; border-radius: 99px; }
+
+  /* Animations */
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes slideUp { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  @keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.08); } }
+  @keyframes shimmer { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+  .fade-in { animation: fadeIn 0.5s ease forwards; }
+  .slide-up { animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1) forwards; }
+
+  /* Skeleton loader */
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f5 25%, #e8e8ef 50%, #f0f0f5 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+  }
+
+  /* Product Card */
+  .product-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s ease;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .product-card:hover { transform: translateY(-6px) scale(1.01); box-shadow: var(--shadow-hover); }
+  .product-card:active { transform: scale(0.97); }
+
+  .product-img-wrap {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #fff5f7 0%, #fff0ea 100%);
+  }
+  .product-img-wrap img {
+    width: 100%;
+    aspect-ratio: 3/4;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+    display: block;
+  }
+  .product-card:hover .product-img-wrap img { transform: scale(1.05); }
+
+  .badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .badge-new { background: var(--accent); color: #fff; }
+  .badge-out { background: #1d1d1f; color: #fff; }
+
+  /* Add to cart button */
+  .btn-add {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: transform 0.2s, background 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-add:hover { background: #0066cc; transform: scale(1.15); }
+  .btn-add:active { transform: scale(0.9); }
+  .btn-add:disabled { background: #d2d2d7; cursor: not-allowed; }
+
+  /* Cart drawer */
+  #cart-drawer {
+    position: fixed; right: 0; top: 0; bottom: 0;
+    width: min(400px, 100vw);
+    background: #fff;
+    z-index: 900;
+    transform: translateX(100%);
+    transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+    display: flex; flex-direction: column;
+    box-shadow: -8px 0 60px rgba(0,0,0,0.15);
+  }
+  #cart-drawer.open { transform: translateX(0); }
+  #cart-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(4px);
+    z-index: 800;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #cart-overlay.show { display: block; opacity: 1; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: all; }
+  .modal-box {
+    background: #fff;
+    border-radius: 28px 28px 0 0;
+    width: 100%; max-width: 600px;
+    max-height: 92vh; overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+    padding: 28px;
+  }
+  .modal-overlay.show .modal-box { transform: translateY(0); }
+
+  /* Pill tabs */
+  .pill-tab {
+    padding: 8px 20px; border-radius: 99px;
+    border: none; cursor: pointer;
+    font-family: inherit; font-weight: 700; font-size: 14px;
+    transition: all 0.25s;
+    white-space: nowrap;
+  }
+  .pill-tab.active { background: var(--text); color: #fff; }
+  .pill-tab:not(.active) { background: transparent; color: var(--text-sec); }
+  .pill-tab:not(.active):hover { background: #e8e8ed; }
+
+  /* Country selector */
+  .country-btn {
+    padding: 8px 16px; border-radius: 99px;
+    border: 2px solid transparent; cursor: pointer;
+    font-family: inherit; font-weight: 700; font-size: 13px;
+    transition: all 0.25s; display: flex; align-items: center; gap: 6px;
+  }
+  .country-btn.active { border-color: var(--blue); background: #e8f0fd; color: var(--blue); }
+  .country-btn:not(.active) { background: #e8e8ed; color: var(--text-sec); }
+
+  /* Payment method cards */
+  .payment-card {
+    border: 2px solid #e8e8ed; border-radius: 16px;
+    padding: 16px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .payment-card:hover { border-color: var(--blue); background: #f5f9ff; }
+  .payment-card.selected { border-color: var(--blue); background: #e8f0fd; }
+
+  /* AI Chat */
+  #ai-chat {
+    position: fixed; bottom: 90px; right: 20px;
+    width: min(350px, calc(100vw - 40px));
+    background: #fff;
+    border-radius: 24px;
+    box-shadow: 0 20px 80px rgba(0,0,0,0.2);
+    z-index: 700;
+    display: flex; flex-direction: column;
+    max-height: 480px;
+    transform: scale(0.8) translateY(20px);
+    opacity: 0; pointer-events: none;
+    transform-origin: bottom right;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #ai-chat.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: all; }
+
+  /* Admin panel */
+  #admin-panel {
+    display: none;
+    position: fixed; inset: 0; z-index: 1100;
+    background: var(--bg);
+    overflow-y: auto;
+  }
+
+  /* Navbar */
+  #navbar {
+    position: sticky; top: 0; z-index: 600;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+
+  /* Qty stepper */
+  .qty-stepper {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .qty-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: none; background: #e8e8ed; cursor: pointer;
+    font-size: 16px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .qty-btn:hover { background: #d2d2d7; }
+
+  /* Toasts */
+  #toast-container {
+    position: fixed; top: 80px; right: 20px;
+    z-index: 2000; display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: #1d1d1f; color: #fff;
+    padding: 12px 18px; border-radius: 12px;
+    font-size: 14px; font-weight: 600;
+    animation: fadeIn 0.3s ease;
+    pointer-events: all;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    max-width: 300px;
+  }
+  .toast.success { background: var(--green); }
+  .toast.error { background: #ff3b30; }
+  .toast.warn { background: var(--accent2); color: #1d1d1f; }
+
+  /* Upload area */
+  .upload-area {
+    border: 2px dashed #d2d2d7; border-radius: 16px;
+    padding: 32px; text-align: center; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .upload-area:hover { border-color: var(--blue); background: #f5f9ff; }
+  .upload-area.drag-over { border-color: var(--blue); background: #e8f0fd; }
+
+  /* Spinner */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  /* Hero */
+  .hero-gradient {
+    background: linear-gradient(135deg, #FF6B8A 0%, #FF9F5B 50%, #FFD93D 100%);
+  }
+
+  input, select, textarea {
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--blue) !important;
+    box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+  }
+
+  /* Responsive grid */
+  .products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+  }
+  @media (min-width: 640px) {
+    .products-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+  }
+  @media (min-width: 1024px) {
+    .products-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  }
+
+  /* Admin table */
+  .admin-table { width: 100%; border-collapse: collapse; }
+  .admin-table th, .admin-table td {
+    padding: 12px 16px; text-align: left;
+    border-bottom: 1px solid #e8e8ed;
+    font-size: 14px;
+  }
+  .admin-table th { font-weight: 700; color: var(--text-sec); background: var(--bg); }
+  .admin-table tr:hover td { background: #fafafa; }
+
+  /* Stock indicator */
+  .stock-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+  .stock-ok { background: var(--green); }
+  .stock-low { background: var(--accent2); }
+  .stock-out { background: #ff3b30; }
+
+  /* Section title iOS style */
+  .section-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 16px;
+  }
+  .section-title { font-size: 22px; font-weight: 800; }
+  .section-link { font-size: 14px; color: var(--blue); font-weight: 600; cursor: pointer; }
+  .section-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- NAVBAR -->
+<nav id="navbar" class="glass">
+  <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <!-- Logo -->
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <span style="font-size:24px;">🧸</span>
+      <span style="font-size:18px; font-weight:900; background:linear-gradient(135deg,#FF6B8A,#FF9F5B); background-clip:text; -webkit-background-clip:text; -webkit-text-fill-color:transparent;">PijamaKids</span>
+    </div>
+    <!-- Search -->
+    <div class="flex-1 max-w-md hidden sm:block">
+      <div class="relative">
+        <input id="search-input" type="text" placeholder="Buscar pijamas..." 
+          class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-gray-100 border-0 text-sm font-semibold"
+          oninput="filterProducts()">
+        <svg class="absolute left-3 top-3 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+    </div>
+    <!-- Right controls -->
+    <div class="flex items-center gap-3">
+      <!-- Country -->
+      <div class="flex gap-2">
+        <button class="country-btn active" id="btn-bo" onclick="setCountry('BO')">🇧🇴 BO</button>
+        <button class="country-btn" id="btn-ar" onclick="setCountry('AR')">🇦🇷 AR</button>
+      </div>
+      <!-- Admin -->
+      <button onclick="showAdminLogin()" class="text-xs font-semibold text-gray-400 hover:text-gray-600 hidden sm:block">Admin</button>
+      <!-- Cart -->
+      <button onclick="toggleCart()" class="relative p-2 rounded-2xl bg-gray-100 hover:bg-gray-200 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 11H4L5 9z"/>
+        </svg>
+        <span id="cart-count" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-black rounded-full items-center justify-center hidden" style="display:none">0</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- Hero Banner -->
+  <div class="hero-gradient rounded-3xl p-8 mb-8 relative overflow-hidden fade-in" style="min-height:200px;">
+    <div style="position:absolute;right:-20px;top:-20px;font-size:160px;opacity:0.2;transform:rotate(15deg);">🧸</div>
+    <div style="position:absolute;right:120px;bottom:-30px;font-size:100px;opacity:0.15;transform:rotate(-10deg);">🐻</div>
+    <div class="relative z-10">
+      <p class="text-white/80 font-bold text-sm uppercase tracking-widest mb-2">Nueva Colección</p>
+      <h1 class="text-white font-black text-4xl mb-3" style="line-height:1.1;">Pijamas<br>para Soñar ✨</h1>
+      <p class="text-white/90 font-semibold text-sm mb-5">Los más tiernos y abrigados del mercado.<br>Envíos a Bolivia 🇧🇴 y Argentina 🇦🇷</p>
+      <button onclick="document.getElementById('products-section').scrollIntoView({behavior:'smooth'})"
+        class="bg-white text-gray-800 font-black px-6 py-3 rounded-2xl text-sm hover:bg-opacity-90 transition-all hover:shadow-lg">
+        Ver Colección →
+      </button>
+    </div>
+  </div>
+
+  <!-- Categories Filter -->
+  <div id="categories-section" class="mb-6 fade-in" style="animation-delay:0.1s">
+    <div class="flex gap-3 overflow-x-auto pb-2" id="categories-bar">
+      <button class="pill-tab active" data-cat="all" onclick="filterByCategory('all', this)">✨ Todos</button>
+      <button class="pill-tab" data-cat="osa" onclick="filterByCategory('osa', this)">🩷 Osa Rosa</button>
+      <button class="pill-tab" data-cat="oso" onclick="filterByCategory('oso', this)">🤎 Oso Café</button>
+      <button class="pill-tab" data-cat="monstruo" onclick="filterByCategory('monstruo', this)">❤️ Monstruo Rojo</button>
+      <button class="pill-tab" data-cat="pikachu" onclick="filterByCategory('pikachu', this)">💛 Pikachu</button>
+    </div>
+  </div>
+
+  <!-- Products Section -->
+  <div id="products-section" class="mb-8">
+    <div class="section-header">
+      <h2 class="section-title">Pijamas 🐾</h2>
+      <span class="section-link" id="products-count">Cargando...</span>
+    </div>
+    <div class="products-grid" id="products-grid">
+      <!-- Skeleton loaders -->
+      <div class="skeleton" style="height:300px; border-radius:18px;"></div>
+      <div class="skeleton" style="height:300px; border-radius:18px;"></div>
+      <div class="skeleton" style="height:300px; border-radius:18px;"></div>
+      <div class="skeleton" style="height:300px; border-radius:18px;"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- AI Chat Button -->
+<button id="ai-btn" onclick="toggleAI()"
+  class="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center z-700 transition-all hover:scale-110"
+  style="background:linear-gradient(135deg,#667eea,#764ba2); z-index:700;">
+  <span id="ai-btn-icon" style="font-size:24px;">🤖</span>
+</button>
+
+<!-- AI Chat Panel -->
+<div id="ai-chat">
+  <div style="padding:16px 16px 0; border-bottom:1px solid #f0f0f5;">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <span style="font-size:20px;">🤖</span>
+        <div>
+          <div style="font-weight:800; font-size:14px;">Asistente PijamaKids</div>
+          <div style="font-size:11px; color:var(--green); font-weight:700;">● En línea</div>
+        </div>
+      </div>
+      <button onclick="toggleAI()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+  </div>
+  <div id="ai-messages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; max-height:280px;">
+    <div class="ai-msg bot" style="background:#f5f5f7; border-radius:16px 16px 16px 4px; padding:12px; font-size:13px; font-weight:600; max-width:85%;">
+      ¡Hola! 👋 Soy tu asistente de PijamaKids. Puedo ayudarte a encontrar la pijama perfecta. ¿Qué estás buscando? Por ejemplo: "pijama rosa talla S" o "algo para niño"
+    </div>
+  </div>
+  <div style="padding:12px; border-top:1px solid #f0f0f5; display:flex; gap:8px;">
+    <input id="ai-input" type="text" placeholder="Escribe tu consulta..." 
+      style="flex:1; padding:10px 14px; border-radius:99px; border:1.5px solid #e8e8ed; font-size:13px; font-weight:600;"
+      onkeydown="if(event.key==='Enter')sendAIMessage()">
+    <button onclick="sendAIMessage()" 
+      style="width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:#fff; cursor:pointer; font-size:16px; flex-shrink:0;">
+      ↑
+    </button>
+  </div>
+</div>
+
+<!-- CART OVERLAY -->
+<div id="cart-overlay" onclick="toggleCart()"></div>
+
+<!-- CART DRAWER -->
+<div id="cart-drawer">
+  <div style="padding:20px 20px 0;" class="flex items-center justify-between">
+    <h2 style="font-size:22px; font-weight:900;">🛒 Mi Carrito</h2>
+    <button onclick="toggleCart()" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+  </div>
+  <!-- Country & currency info -->
+  <div style="padding:12px 20px;">
+    <div id="cart-currency-info" class="text-xs font-bold text-gray-500 bg-gray-100 rounded-2xl px-3 py-2"></div>
+  </div>
+  <!-- Cart items -->
+  <div id="cart-items" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:12px;"></div>
+  <!-- Cart footer -->
+  <div style="padding:16px 20px; border-top:1px solid #f0f0f5;">
+    <div class="flex justify-between items-center mb-1">
+      <span style="font-size:14px; font-weight:700; color:var(--text-sec);">Subtotal</span>
+      <span id="cart-subtotal" style="font-size:18px; font-weight:900;">Bs. 0</span>
+    </div>
+    <div class="flex justify-between items-center mb-4">
+      <span style="font-size:12px; color:var(--text-sec);" id="cart-limit-info"></span>
+    </div>
+    <button onclick="proceedToCheckout()" id="checkout-btn"
+      class="w-full py-4 rounded-2xl font-black text-white text-lg transition-all hover:opacity-90 disabled:opacity-40"
+      style="background:linear-gradient(135deg,#FF6B8A,#FF9F5B);">
+      Confirmar Pedido →
+    </button>
+    <button onclick="clearCart()" class="w-full mt-2 py-2 text-sm text-gray-400 font-bold hover:text-gray-600">
+      Vaciar carrito
+    </button>
+  </div>
+</div>
+
+<!-- PRODUCT DETAIL MODAL -->
+<div id="product-modal" class="modal-overlay">
+  <div class="modal-box">
+    <button onclick="closeModal('product-modal')" class="text-gray-400 hover:text-gray-600 text-2xl mb-4 block">✕</button>
+    <div id="product-modal-content"></div>
+  </div>
+</div>
+
+<!-- CHECKOUT MODAL -->
+<div id="checkout-modal" class="modal-overlay">
+  <div class="modal-box">
+    <button onclick="closeModal('checkout-modal')" class="text-gray-400 hover:text-gray-600 text-2xl mb-4 block">✕</button>
+    <div id="checkout-content"></div>
+  </div>
+</div>
+
+<!-- ADMIN LOGIN MODAL -->
+<div id="admin-login-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:420px; margin:auto; border-radius:28px;">
+    <h2 style="font-size:24px; font-weight:900; margin-bottom:6px;">Panel Admin 🔐</h2>
+    <p style="color:var(--text-sec); font-size:14px; font-weight:600; margin-bottom:24px;">Te enviaremos un enlace mágico a tu correo</p>
+    <input id="admin-email" type="email" placeholder="admin@pijamakids.com"
+      class="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 text-sm font-bold mb-4"
+      style="border-color:#e8e8ed;">
+    <button onclick="sendMagicLink()" 
+      class="w-full py-3 rounded-2xl font-black text-white transition-all hover:opacity-90"
+      style="background:#0071e3;">
+      Enviar Magic Link ✨
+    </button>
+    <div id="magic-link-status" class="mt-3 text-center text-sm font-bold text-green-500"></div>
+    <button onclick="closeModal('admin-login-modal')" class="w-full mt-3 py-2 text-sm text-gray-400 font-bold">Cancelar</button>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="admin-panel">
+  <div class="max-w-6xl mx-auto px-4 py-6">
+    <!-- Admin Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 style="font-size:28px; font-weight:900;">Panel de Administración 🧸</h1>
+        <p style="color:var(--text-sec); font-weight:600;">PijamaKids Backoffice</p>
+      </div>
+      <button onclick="exitAdmin()" class="px-4 py-2 rounded-2xl bg-gray-100 font-bold text-sm hover:bg-gray-200">
+        ← Volver a Tienda
+      </button>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <p class="text-xs font-bold text-gray-400 mb-1">PRODUCTOS</p>
+        <p id="stat-products" class="text-3xl font-black">-</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <p class="text-xs font-bold text-gray-400 mb-1">PEDIDOS HOY</p>
+        <p id="stat-orders" class="text-3xl font-black">-</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <p class="text-xs font-bold text-gray-400 mb-1">SIN STOCK</p>
+        <p id="stat-outstock" class="text-3xl font-black text-red-500">-</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <p class="text-xs font-bold text-gray-400 mb-1">STOCK BAJO</p>
+        <p id="stat-lowstock" class="text-3xl font-black text-orange-400">-</p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-3 mb-6 overflow-x-auto">
+      <button class="pill-tab active" onclick="adminTab('products', this)">📦 Productos</button>
+      <button class="pill-tab" onclick="adminTab('orders', this)">📋 Pedidos</button>
+      <button class="pill-tab" onclick="adminTab('config', this)">⚙️ Configuración</button>
+    </div>
+
+    <!-- Products Tab -->
+    <div id="tab-products">
+      <div class="flex justify-between items-center mb-4">
+        <h3 style="font-size:18px; font-weight:800;">Gestión de Productos</h3>
+        <button onclick="showAddProduct()" 
+          class="px-4 py-2 rounded-2xl font-black text-white text-sm"
+          style="background:#0071e3;">+ Nuevo Producto</button>
+      </div>
+      <!-- Add/Edit Product Form -->
+      <div id="product-form-area" class="bg-white rounded-2xl p-6 shadow-sm mb-6" style="display:none;">
+        <h4 style="font-size:16px; font-weight:800; margin-bottom:16px;" id="product-form-title">Nuevo Producto</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">NOMBRE</label>
+            <input id="pf-name" type="text" placeholder="Ej: Pijama Osa Rosa" 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">CATEGORÍA</label>
+            <select id="pf-category" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+              <option value="osa">🩷 Osa Rosa</option>
+              <option value="oso">🤎 Oso Café</option>
+              <option value="monstruo">❤️ Monstruo Rojo</option>
+              <option value="pikachu">💛 Pikachu</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">TALLA</label>
+            <select id="pf-size" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+              <option value="S">Small (S)</option>
+              <option value="M">Medium (M)</option>
+              <option value="L">Large (L)</option>
+              <option value="XL">XL</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">PRECIO (BOB)</label>
+            <input id="pf-price-bob" type="number" placeholder="0.00" 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;" oninput="autoConvertPrice()">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">PRECIO (ARS) — Auto</label>
+            <input id="pf-price-ars" type="number" placeholder="Auto-calculado" 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-500 block mb-1">STOCK (unidades)</label>
+            <input id="pf-stock" type="number" placeholder="0" min="0"
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-xs font-bold text-gray-500 block mb-1">DESCRIPCIÓN</label>
+            <textarea id="pf-desc" rows="2" placeholder="Describe el producto..."
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold resize-none" style="border-color:#e8e8ed;"></textarea>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-xs font-bold text-gray-500 block mb-2">URL IMAGEN (Google Drive o directa)</label>
+            <input id="pf-image" type="text" placeholder="https://drive.google.com/uc?id=..." 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+            <p class="text-xs text-gray-400 font-semibold mt-1">📁 Para Google Drive: comparte la imagen y usa el link directo con ?id=FILE_ID</p>
+          </div>
+        </div>
+        <input type="hidden" id="pf-editing-id">
+        <div class="flex gap-3 mt-4">
+          <button onclick="saveProduct()" 
+            class="px-6 py-3 rounded-2xl font-black text-white text-sm"
+            style="background:#0071e3;">Guardar Producto</button>
+          <button onclick="document.getElementById('product-form-area').style.display='none'"
+            class="px-6 py-3 rounded-2xl font-bold text-sm bg-gray-100">Cancelar</button>
+        </div>
+      </div>
+      <!-- Products list -->
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Imagen</th>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Talla</th>
+                <th>Precio BOB</th>
+                <th>Stock</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="admin-products-tbody">
+              <tr><td colspan="8" style="text-align:center; padding:40px; color:#999;">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Tab -->
+    <div id="tab-orders" style="display:none;">
+      <div class="flex justify-between items-center mb-4">
+        <h3 style="font-size:18px; font-weight:800;">Pedidos Recientes</h3>
+        <button onclick="loadAdminOrders()" class="px-4 py-2 rounded-2xl bg-gray-100 font-bold text-sm">🔄 Actualizar</button>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>País</th>
+                <th>Total</th>
+                <th>Método Pago</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="admin-orders-tbody">
+              <tr><td colspan="8" style="text-align:center; padding:40px; color:#999;">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config Tab -->
+    <div id="tab-config" style="display:none;">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <!-- Exchange rate -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h4 style="font-size:16px; font-weight:800; margin-bottom:16px;">💱 Tasa de Cambio</h4>
+          <div class="mb-4">
+            <label class="text-xs font-bold text-gray-500 block mb-1">BOB → ARS</label>
+            <input id="cfg-rate-ars" type="number" step="0.01" 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+            <p class="text-xs text-gray-400 font-semibold mt-1">1 BOB = X ARS</p>
+          </div>
+          <button onclick="saveConfig()" class="px-6 py-3 rounded-2xl font-black text-white text-sm" style="background:#0071e3;">
+            Guardar Tasas
+          </button>
+        </div>
+        <!-- Payment config -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h4 style="font-size:16px; font-weight:800; margin-bottom:16px;">💳 Configuración de Pagos</h4>
+          <div class="mb-3">
+            <label class="text-xs font-bold text-gray-500 block mb-1">QR Bolivia — URL imagen QR</label>
+            <input id="cfg-qr-bo" type="text" placeholder="https://..." 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <div class="mb-3">
+            <label class="text-xs font-bold text-gray-500 block mb-1">MercadoPago — Link de pago</label>
+            <input id="cfg-mp-link" type="text" placeholder="https://mpago.la/..." 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <div class="mb-4">
+            <label class="text-xs font-bold text-gray-500 block mb-1">Alias MercadoPago</label>
+            <input id="cfg-mp-alias" type="text" placeholder="tu.alias.mp" 
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <button onclick="saveConfig()" class="px-6 py-3 rounded-2xl font-black text-white text-sm" style="background:#0071e3;">
+            Guardar Config
+          </button>
+        </div>
+        <!-- Limits -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h4 style="font-size:16px; font-weight:800; margin-bottom:16px;">📦 Límites de Compra</h4>
+          <p class="text-sm text-gray-500 font-semibold mb-4">Configurados en el sistema:</p>
+          <div class="flex gap-4">
+            <div class="flex-1 bg-blue-50 rounded-2xl p-4 text-center">
+              <p class="text-2xl font-black text-blue-600">5</p>
+              <p class="text-xs font-bold text-blue-400">unidades máx.<br>Argentina 🇦🇷</p>
+            </div>
+            <div class="flex-1 bg-green-50 rounded-2xl p-4 text-center">
+              <p class="text-2xl font-black text-green-600">6</p>
+              <p class="text-xs font-bold text-green-400">unidades máx.<br>Bolivia 🇧🇴</p>
+            </div>
+          </div>
+        </div>
+        <!-- Low stock alerts -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h4 style="font-size:16px; font-weight:800; margin-bottom:16px;">🔔 Alertas de Stock</h4>
+          <div class="mb-4">
+            <label class="text-xs font-bold text-gray-500 block mb-1">UMBRAL STOCK BAJO</label>
+            <input id="cfg-low-stock" type="number" value="5" min="1"
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+            <p class="text-xs text-gray-400 font-semibold mt-1">Alerta cuando stock ≤ este número</p>
+          </div>
+          <div class="mb-4">
+            <label class="text-xs font-bold text-gray-500 block mb-1">EMAIL ALERTAS</label>
+            <input id="cfg-alert-email" type="email" placeholder="admin@pijamakids.com"
+              class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+          </div>
+          <button onclick="saveConfig()" class="px-6 py-3 rounded-2xl font-black text-white text-sm" style="background:#0071e3;">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION — Replace with your actual values
+// ============================================================
+const SUPABASE_URL = 'https://usbnyhlsagyykcjbaoad.supabase.co'; // e.g. https://xxx.supabase.co
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzYm55aGxzYWd5eWtjamJhb2FkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5OTEwMDUsImV4cCI6MjA4NzU2NzAwNX0.P735r0q56ST_1sHnO4dYAR6uER3JfbIkM3L7uloZsSI';
+
+// Init Supabase
+let supabase;
+try {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch(e) {
+  console.warn('Supabase not configured, running in demo mode');
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  country: 'BO',
+  currency: 'BOB',
+  cart: [],
+  products: [],
+  filteredProducts: [],
+  currentCategory: 'all',
+  config: {
+    rateARS: 180, // 1 BOB = X ARS (adjustable)
+    qrBolivia: '',
+    mpLink: '',
+    mpAlias: '',
+    lowStockThreshold: 5
+  },
+  isAdmin: false,
+  maxQtyBO: 6,
+  maxQtyAR: 5
+};
+
+// DEMO PRODUCTS — will be replaced by Supabase data
+const DEMO_PRODUCTS = [
+  {
+    id: '1', name: 'Pijama Osa Rosa - Talla S', category: 'osa', size: 'S',
+    price_bob: 180, price_ars: null, stock: 8,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_27_39.jpeg',
+    description: 'Pijama enterizo de polar suave. Capucha con orejitas de osa. Cierre frontal. Talla S (1-2 años).', active: true
+  },
+  {
+    id: '2', name: 'Pijama Osa Rosa - Talla M', category: 'osa', size: 'M',
+    price_bob: 195, price_ars: null, stock: 4,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_27_39.jpeg',
+    description: 'Pijama enterizo de polar suave. Capucha con orejitas de osa. Cierre frontal. Talla M (2-3 años).', active: true
+  },
+  {
+    id: '3', name: 'Pijama Oso Café - Talla S', category: 'oso', size: 'S',
+    price_bob: 185, price_ars: null, stock: 6,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_28_08.jpeg',
+    description: 'Pijama enterizo café chocolate. Capucha con cara de osito. Perfecto para niños activos. Talla S (1-2 años).', active: true
+  },
+  {
+    id: '4', name: 'Pijama Oso Café - Talla M', category: 'oso', size: 'M',
+    price_bob: 200, price_ars: null, stock: 2,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_28_08.jpeg',
+    description: 'Pijama enterizo café chocolate. Capucha con cara de osito. Perfecto para niños activos. Talla M (2-3 años).', active: true
+  },
+  {
+    id: '5', name: 'Pijama Monstruo Rojo - Talla S', category: 'monstruo', size: 'S',
+    price_bob: 190, price_ars: null, stock: 0,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_28_41.jpeg',
+    description: 'Pijama monstruo rojo con capucha de dientes. ¡El más divertido! Talla S (1-2 años).', active: true
+  },
+  {
+    id: '6', name: 'Pijama Monstruo Rojo - Talla M', category: 'monstruo', size: 'M',
+    price_bob: 205, price_ars: null, stock: 5,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_28_41.jpeg',
+    description: 'Pijama monstruo rojo con capucha de dientes. ¡El más divertido! Talla M (2-3 años).', active: true
+  },
+  {
+    id: '7', name: 'Pijama Pikachu - Talla S', category: 'pikachu', size: 'S',
+    price_bob: 210, price_ars: null, stock: 7,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_29_20.jpeg',
+    description: 'Pijama Pikachu amarillo eléctrico. Orejas puntiagudas. ¡El favorito de los fans de Pokémon! Talla S (1-2 años).', active: true
+  },
+  {
+    id: '8', name: 'Pijama Pikachu - Talla M', category: 'pikachu', size: 'M',
+    price_bob: 225, price_ars: null, stock: 3,
+    image_url: '/mnt/user-data/uploads/WhatsApp_Image_2026-02-12_at_23_29_20.jpeg',
+    description: 'Pijama Pikachu amarillo eléctrico. Orejas puntiagudas. ¡El favorito de los fans de Pokémon! Talla M (2-3 años).', active: true
+  }
+];
+
+// Category emoji map
+const CAT_ICONS = { osa:'🩷', oso:'🤎', monstruo:'❤️', pikachu:'💛' };
+const CAT_NAMES = { osa:'Osa Rosa', oso:'Oso Café', monstruo:'Monstruo Rojo', pikachu:'Pikachu' };
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadProducts();
+  updateCartUI();
+  updateCurrencyInfo();
+  checkAdminSession();
+});
+
+async function loadProducts() {
+  try {
+    if (!supabase || SUPABASE_URL === 'YOUR_SUPABASE_URL') throw new Error('demo');
+    const { data, error } = await supabase.from('products').select('*').eq('active', true);
+    if (error) throw error;
+    state.products = data.map(p => ({...p, price_ars: p.price_ars || Math.round(p.price_bob * state.config.rateARS)}));
+  } catch(e) {
+    // Use demo products
+    state.products = DEMO_PRODUCTS.map(p => ({
+      ...p,
+      price_ars: Math.round(p.price_bob * state.config.rateARS)
+    }));
+  }
+  state.filteredProducts = [...state.products];
+  renderProducts(state.filteredProducts);
+}
+
+// ============================================================
+// PRODUCTS RENDER
+// ============================================================
+function renderProducts(products) {
+  const grid = document.getElementById('products-grid');
+  const count = document.getElementById('products-count');
+  count.textContent = `${products.length} producto${products.length !== 1 ? 's' : ''}`;
+
+  if (!products.length) {
+    grid.innerHTML = `<div class="col-span-full text-center py-16 text-gray-400">
+      <div style="font-size:64px; margin-bottom:16px;">🔍</div>
+      <p style="font-size:18px; font-weight:700;">Sin resultados</p>
+      <p style="font-size:14px;">Intenta otra búsqueda o categoría</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = products.map(p => {
+    const price = state.country === 'BO' ? p.price_bob : p.price_ars;
+    const currency = state.country === 'BO' ? 'Bs.' : '$';
+    const outOfStock = p.stock === 0;
+    const lowStock = p.stock > 0 && p.stock <= state.config.lowStockThreshold;
+
+    return `
+    <div class="product-card fade-in" onclick="showProductDetail('${p.id}')">
+      <div class="product-img-wrap">
+        <img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.style.background='#f5f5f7'; this.style.minHeight='200px';">
+        ${outOfStock ? '<span class="badge badge-out">Sin stock</span>' : '<span class="badge badge-new">Nuevo</span>'}
+        ${lowStock ? `<span style="position:absolute;top:10px;right:10px;background:#ff9f0a;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:99px;">¡Últimas ${p.stock}!</span>` : ''}
+      </div>
+      <div style="padding:12px;">
+        <p style="font-size:11px; color:var(--text-sec); font-weight:700; margin-bottom:2px; text-transform:uppercase; letter-spacing:0.5px;">
+          ${CAT_ICONS[p.category] || '🐾'} ${CAT_NAMES[p.category] || p.category}
+        </p>
+        <p style="font-size:14px; font-weight:800; margin-bottom:4px; line-height:1.2;">${p.name}</p>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <span style="font-size:18px; font-weight:900; color:var(--accent);">${currency} ${price.toLocaleString()}</span>
+            ${state.country === 'BO' ? `<span style="font-size:10px; color:#aaa; font-weight:600; margin-left:4px;">≈ $${p.price_ars?.toLocaleString()} ARS</span>` : ''}
+          </div>
+          <button class="btn-add" onclick="event.stopPropagation(); addToCart('${p.id}')" 
+            ${outOfStock ? 'disabled title="Sin stock"' : ''}>+</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; margin-top:6px;">
+          <span class="stock-dot ${outOfStock ? 'stock-out' : lowStock ? 'stock-low' : 'stock-ok'}"></span>
+          <span style="font-size:11px; font-weight:700; color:var(--text-sec);">
+            ${outOfStock ? 'Sin stock' : lowStock ? `Solo ${p.stock} disp.` : `${p.stock} disponibles`}
+          </span>
+          <span style="font-size:11px; color:#d2d2d7; margin-left:auto;">Talla ${p.size}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// FILTERING
+// ============================================================
+function filterByCategory(cat, btn) {
+  state.currentCategory = cat;
+  document.querySelectorAll('.pill-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function filterProducts() {
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  state.filteredProducts = state.products.filter(p => {
+    const matchCat = state.currentCategory === 'all' || p.category === state.currentCategory;
+    const matchQ = !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || p.size.toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+  renderProducts(state.filteredProducts);
+}
+
+// ============================================================
+// COUNTRY & CURRENCY
+// ============================================================
+function setCountry(country) {
+  state.country = country;
+  state.currency = country === 'BO' ? 'BOB' : 'ARS';
+  document.getElementById('btn-bo').classList.toggle('active', country === 'BO');
+  document.getElementById('btn-ar').classList.toggle('active', country === 'AR');
+  updateCurrencyInfo();
+  renderProducts(state.filteredProducts);
+  updateCartUI();
+}
+
+function updateCurrencyInfo() {
+  const info = document.getElementById('cart-currency-info');
+  const limit = state.country === 'BO' ? state.maxQtyBO : state.maxQtyAR;
+  const curr = state.country === 'BO' ? 'Bolivianos (BOB)' : 'Pesos Argentinos (ARS)';
+  info.textContent = `🌍 ${state.country === 'BO' ? 'Bolivia' : 'Argentina'} · ${curr} · Máx. ${limit} unidades por venta`;
+}
+
+// ============================================================
+// PRODUCT DETAIL
+// ============================================================
+function showProductDetail(id) {
+  const p = state.products.find(x => x.id === id);
+  if (!p) return;
+  const price = state.country === 'BO' ? p.price_bob : p.price_ars;
+  const currency = state.country === 'BO' ? 'Bs.' : '$';
+  const outOfStock = p.stock === 0;
+
+  document.getElementById('product-modal-content').innerHTML = `
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <img src="${p.image_url}" alt="${p.name}" style="width:100%; max-width:280px; border-radius:20px; object-fit:cover; aspect-ratio:3/4; margin:auto;">
+      <div style="flex:1; min-width:220px;">
+        <span style="font-size:11px; font-weight:700; color:var(--text-sec); text-transform:uppercase; letter-spacing:0.5px;">
+          ${CAT_ICONS[p.category]} ${CAT_NAMES[p.category]}
+        </span>
+        <h2 style="font-size:24px; font-weight:900; margin:8px 0 4px;">${p.name}</h2>
+        <p style="color:var(--text-sec); font-size:14px; font-weight:600; margin-bottom:16px;">${p.description}</p>
+        <div style="background:#f5f5f7; border-radius:16px; padding:16px; margin-bottom:16px;">
+          <div style="font-size:32px; font-weight:900; color:var(--accent);">${currency} ${price.toLocaleString()}</div>
+          ${state.country === 'BO' ? `<div style="font-size:13px; color:#aaa; font-weight:600;">≈ $ ${p.price_ars?.toLocaleString()} pesos argentinos</div>` : ''}
+        </div>
+        <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
+          <span style="background:#e8e8ed; border-radius:99px; padding:6px 16px; font-size:13px; font-weight:700;">Talla: ${p.size}</span>
+          <span style="display:flex; align-items:center; gap:4px; font-size:13px; font-weight:700;">
+            <span class="stock-dot ${outOfStock ? 'stock-out' : p.stock <= 5 ? 'stock-low' : 'stock-ok'}"></span>
+            ${outOfStock ? 'Sin stock' : `${p.stock} disponibles`}
+          </span>
+        </div>
+        <button onclick="addToCart('${p.id}'); closeModal('product-modal')"
+          class="w-full py-4 rounded-2xl font-black text-white text-lg transition-all hover:opacity-90"
+          style="background:${outOfStock ? '#d2d2d7' : 'linear-gradient(135deg,#FF6B8A,#FF9F5B)'}"
+          ${outOfStock ? 'disabled' : ''}>
+          ${outOfStock ? 'Sin stock disponible' : '+ Agregar al Carrito'}
+        </button>
+      </div>
+    </div>`;
+  showModal('product-modal');
+}
+
+// ============================================================
+// CART
+// ============================================================
+function addToCart(id) {
+  const product = state.products.find(p => p.id === id);
+  if (!product || product.stock === 0) return showToast('Sin stock disponible', 'error');
+
+  const maxQty = state.country === 'BO' ? state.maxQtyBO : state.maxQtyAR;
+  const totalInCart = state.cart.reduce((sum, i) => sum + i.qty, 0);
+  
+  if (totalInCart >= maxQty) {
+    return showToast(`Máximo ${maxQty} unidades por venta en ${state.country === 'BO' ? 'Bolivia' : 'Argentina'}`, 'warn');
+  }
+
+  const existing = state.cart.find(i => i.id === id);
+  if (existing) {
+    if (existing.qty >= product.stock) return showToast('No hay más stock disponible', 'error');
+    if (existing.qty >= maxQty) return showToast(`Máximo ${maxQty} unidades`, 'warn');
+    existing.qty++;
+  } else {
+    state.cart.push({ ...product, qty: 1 });
+  }
+
+  updateCartUI();
+  showToast(`${product.name} agregado al carrito 🛒`, 'success');
+  // Animate cart button
+  document.querySelector('[onclick="toggleCart()"]').style.animation = 'pulse 0.3s ease';
+  setTimeout(() => { document.querySelector('[onclick="toggleCart()"]').style.animation = ''; }, 300);
+}
+
+function removeFromCart(id) {
+  state.cart = state.cart.filter(i => i.id !== id);
+  updateCartUI();
+}
+
+function updateCartQty(id, delta) {
+  const item = state.cart.find(i => i.id === id);
+  if (!item) return;
+  const maxQty = state.country === 'BO' ? state.maxQtyBO : state.maxQtyAR;
+  const totalOther = state.cart.filter(i => i.id !== id).reduce((s, i) => s + i.qty, 0);
+  const newQty = item.qty + delta;
+  if (newQty <= 0) return removeFromCart(id);
+  if (newQty > item.stock) return showToast('Sin más stock', 'error');
+  if ((totalOther + newQty) > maxQty) return showToast(`Máximo ${maxQty} unidades totales`, 'warn');
+  item.qty = newQty;
+  updateCartUI();
+}
+
+function clearCart() {
+  state.cart = [];
+  updateCartUI();
+}
+
+function updateCartUI() {
+  const totalQty = state.cart.reduce((s, i) => s + i.qty, 0);
+  const count = document.getElementById('cart-count');
+  count.textContent = totalQty;
+  count.style.display = totalQty > 0 ? 'flex' : 'none';
+
+  const itemsEl = document.getElementById('cart-items');
+  if (!state.cart.length) {
+    itemsEl.innerHTML = `<div style="text-align:center; padding:40px; color:#aaa;">
+      <div style="font-size:48px; margin-bottom:12px;">🛒</div>
+      <p style="font-weight:700;">Tu carrito está vacío</p>
+      <p style="font-size:13px; margin-top:4px;">Agrega pijamas desde la tienda</p>
+    </div>`;
+  } else {
+    itemsEl.innerHTML = state.cart.map(item => {
+      const price = state.country === 'BO' ? item.price_bob : item.price_ars;
+      const curr = state.country === 'BO' ? 'Bs.' : '$';
+      return `
+      <div style="display:flex; gap:12px; align-items:center; background:#f9f9fb; border-radius:16px; padding:12px;">
+        <img src="${item.image_url}" style="width:60px; height:70px; object-fit:cover; border-radius:12px; flex-shrink:0;">
+        <div style="flex:1; min-width:0;">
+          <p style="font-size:13px; font-weight:800; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.name}</p>
+          <p style="font-size:11px; color:var(--text-sec); font-weight:700; margin-bottom:6px;">Talla ${item.size}</p>
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-size:15px; font-weight:900; color:var(--accent);">${curr} ${(price * item.qty).toLocaleString()}</span>
+            <div class="qty-stepper">
+              <button class="qty-btn" onclick="updateCartQty('${item.id}', -1)">−</button>
+              <span style="font-weight:800; font-size:14px; min-width:20px; text-align:center;">${item.qty}</span>
+              <button class="qty-btn" onclick="updateCartQty('${item.id}', 1)">+</button>
+            </div>
+          </div>
+        </div>
+        <button onclick="removeFromCart('${item.id}')" style="color:#d2d2d7; font-size:18px; background:none; border:none; cursor:pointer; flex-shrink:0;" 
+          title="Eliminar">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  const total = state.cart.reduce((s, i) => {
+    const price = state.country === 'BO' ? i.price_bob : i.price_ars;
+    return s + price * i.qty;
+  }, 0);
+  const curr = state.country === 'BO' ? 'Bs.' : '$';
+  document.getElementById('cart-subtotal').textContent = `${curr} ${total.toLocaleString()}`;
+
+  const maxQty = state.country === 'BO' ? state.maxQtyBO : state.maxQtyAR;
+  const totalQty2 = state.cart.reduce((s, i) => s + i.qty, 0);
+  document.getElementById('cart-limit-info').textContent = `${totalQty2}/${maxQty} unidades máx. para ${state.country === 'BO' ? 'Bolivia 🇧🇴' : 'Argentina 🇦🇷'}`;
+
+  updateCurrencyInfo();
+}
+
+function toggleCart() {
+  const drawer = document.getElementById('cart-drawer');
+  const overlay = document.getElementById('cart-overlay');
+  const isOpen = drawer.classList.contains('open');
+  drawer.classList.toggle('open', !isOpen);
+  overlay.classList.toggle('show', !isOpen);
+}
+
+// ============================================================
+// CHECKOUT
+// ============================================================
+function proceedToCheckout() {
+  if (!state.cart.length) return showToast('Tu carrito está vacío', 'warn');
+  toggleCart();
+
+  const total = state.cart.reduce((s, i) => {
+    const price = state.country === 'BO' ? i.price_bob : i.price_ars;
+    return s + price * i.qty;
+  }, 0);
+  const curr = state.country === 'BO' ? 'Bs.' : '$';
+  const currCode = state.country === 'BO' ? 'BOB' : 'ARS';
+
+  // Payment methods based on country
+  const paymentOptions = state.country === 'BO'
+    ? `
+      <div class="payment-card" id="pm-qr" onclick="selectPayment('qr_bolivia')">
+        <span style="font-size:32px;">📱</span>
+        <div>
+          <p style="font-weight:800; font-size:14px;">QR Bolivia (Tigo/Viva/Simple)</p>
+          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Pago inmediato con tu app bancaria. Deberás subir comprobante.</p>
+        </div>
+      </div>
+      <div class="payment-card" id="pm-ce" onclick="selectPayment('contra_entrega')">
+        <span style="font-size:32px;">🏠</span>
+        <div>
+          <p style="font-weight:800; font-size:14px;">Contra Entrega (Bolivia)</p>
+          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Paga al recibir tu pedido. Foto del pago en efectivo.</p>
+        </div>
+      </div>`
+    : `
+      <div class="payment-card" id="pm-mp" onclick="selectPayment('mercadopago')">
+        <span style="font-size:32px;">💳</span>
+        <div>
+          <p style="font-weight:800; font-size:14px;">MercadoPago (Argentina)</p>
+          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Transferencia o link de pago. Deberás subir comprobante.</p>
+        </div>
+      </div>
+      <div class="payment-card" id="pm-ce" onclick="selectPayment('contra_entrega')">
+        <span style="font-size:32px;">🏠</span>
+        <div>
+          <p style="font-weight:800; font-size:14px;">Contra Entrega (Argentina)</p>
+          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Paga al recibir. Máximo 5 unidades por lote.</p>
+        </div>
+      </div>`;
+
+  const itemsList = state.cart.map(i => {
+    const price = state.country === 'BO' ? i.price_bob : i.price_ars;
+    return `<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:6px 0; border-bottom:1px solid #f0f0f5;">
+      <span>${i.name} × ${i.qty}</span>
+      <span style="font-weight:800;">${curr} ${(price * i.qty).toLocaleString()}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('checkout-content').innerHTML = `
+    <h2 style="font-size:24px; font-weight:900; margin-bottom:4px;">Finalizar Compra 🛍️</h2>
+    <p style="color:var(--text-sec); font-size:14px; font-weight:600; margin-bottom:20px;">Completa tus datos y elige cómo pagar</p>
+
+    <!-- Order summary -->
+    <div style="background:#f9f9fb; border-radius:20px; padding:16px; margin-bottom:20px;">
+      <p style="font-weight:800; margin-bottom:10px; font-size:14px;">📦 Resumen del Pedido</p>
+      ${itemsList}
+      <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:900; padding-top:10px; margin-top:4px;">
+        <span>TOTAL</span>
+        <span style="color:var(--accent);">${curr} ${total.toLocaleString()} ${currCode}</span>
+      </div>
+    </div>
+
+    <!-- Customer data -->
+    <div style="margin-bottom:20px;">
+      <p style="font-weight:800; margin-bottom:12px; font-size:14px;">👤 Tus Datos</p>
+      <div style="display:grid; gap:10px;">
+        <input id="co-name" type="text" placeholder="Nombre completo *" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+        <input id="co-email" type="email" placeholder="Email *" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+        <input id="co-phone" type="tel" placeholder="WhatsApp / Teléfono *" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+        <input id="co-address" type="text" placeholder="Dirección de entrega *" class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-semibold" style="border-color:#e8e8ed;">
+      </div>
+    </div>
+
+    <!-- Payment method -->
+    <div style="margin-bottom:20px;">
+      <p style="font-weight:800; margin-bottom:12px; font-size:14px;">💳 Método de Pago</p>
+      <div style="display:flex; flex-direction:column; gap:10px;" id="payment-options">
+        ${paymentOptions}
+      </div>
+    </div>
+
+    <!-- Payment instructions (dynamic) -->
+    <div id="payment-instructions" style="margin-bottom:20px;"></div>
+
+    <!-- Payment proof upload -->
+    <div id="proof-upload-area" style="margin-bottom:20px; display:none;">
+      <p style="font-weight:800; margin-bottom:10px; font-size:14px;">📎 Comprobante de Pago</p>
+      <div class="upload-area" id="proof-drop" onclick="document.getElementById('proof-file').click()">
+        <div style="font-size:40px; margin-bottom:8px;">📷</div>
+        <p style="font-weight:700; font-size:14px;">Sube foto, captura o PDF del pago</p>
+        <p style="font-size:12px; color:var(--text-sec); font-weight:600; margin-top:4px;">El monto debe coincidir con el total de tu pedido</p>
+      </div>
+      <input type="file" id="proof-file" accept="image/*,.pdf" style="display:none;" onchange="handleProofUpload(event)">
+      <div id="proof-preview" style="margin-top:10px;"></div>
+    </div>
+
+    <button onclick="submitOrder(${total}, '${currCode}')" 
+      class="w-full py-4 rounded-2xl font-black text-white text-lg transition-all hover:opacity-90"
+      style="background:linear-gradient(135deg,#FF6B8A,#FF9F5B);">
+      Confirmar Pedido 🚀
+    </button>`;
+
+  showModal('checkout-modal');
+}
+
+let selectedPayment = '';
+function selectPayment(method) {
+  selectedPayment = method;
+  document.querySelectorAll('.payment-card').forEach(c => c.classList.remove('selected'));
+  const btn = document.getElementById(`pm-${method.replace('_', '-').split('_')[0]}`);
+  if (btn) btn.classList.add('selected');
+  
+  // Also check for contra_entrega
+  if (method === 'contra_entrega') {
+    document.getElementById('pm-ce')?.classList.add('selected');
+  }
+
+  showPaymentInstructions(method);
+}
+
+function showPaymentInstructions(method) {
+  const instEl = document.getElementById('payment-instructions');
+  const proofArea = document.getElementById('proof-upload-area');
+
+  if (method === 'qr_bolivia') {
+    const qrUrl = state.config.qrUrl || '';
+    instEl.innerHTML = `
+      <div style="background:#e8f8f0; border-radius:20px; padding:16px; border:2px solid #30d158;">
+        <p style="font-weight:800; color:#1a7f3a; margin-bottom:8px;">📱 Pago con QR Bolivia</p>
+        ${qrUrl ? `<img src="${qrUrl}" style="width:180px; height:180px; margin:12px auto; display:block; border-radius:12px;">` : 
+        `<div style="width:180px; height:180px; background:#d4edda; border-radius:12px; margin:12px auto; display:flex; align-items:center; justify-content:center; font-size:40px;">📱</div>
+         <p style="font-size:12px; color:#666; text-align:center; font-weight:600;">QR no configurado — el admin debe subirlo en el panel</p>`}
+        <p style="font-size:13px; font-weight:700; color:#1a7f3a; text-align:center; margin-top:8px;">
+          1. Abre tu app bancaria (Tigo Money, SimplePay, banco)<br>
+          2. Escanea el QR<br>
+          3. Confirma el monto exacto<br>
+          4. Sube el comprobante abajo
+        </p>
+      </div>`;
+    proofArea.style.display = 'block';
+  } else if (method === 'mercadopago') {
+    const link = state.config.mpLink || '#';
+    const alias = state.config.mpAlias || 'Configura alias en el panel admin';
+    instEl.innerHTML = `
+      <div style="background:#e8f0fd; border-radius:20px; padding:16px; border:2px solid #0071e3;">
+        <p style="font-weight:800; color:#004a9f; margin-bottom:8px;">💳 Pago con MercadoPago</p>
+        <p style="font-size:13px; font-weight:700; color:#004a9f; margin-bottom:10px;">
+          Alias: <span style="font-size:16px; background:#fff; padding:4px 12px; border-radius:99px;">${alias}</span>
+        </p>
+        ${link !== '#' ? `<a href="${link}" target="_blank" style="display:block; background:#009ee3; color:#fff; text-align:center; padding:12px; border-radius:16px; font-weight:800; text-decoration:none; margin-bottom:10px;">→ Pagar con MercadoPago</a>` : 
+        `<div style="background:#fff; border-radius:12px; padding:10px; text-align:center; font-size:13px; color:#666; font-weight:600; margin-bottom:10px;">Link de MercadoPago no configurado aún</div>`}
+        <p style="font-size:12px; font-weight:700; color:#004a9f;">
+          Opciones: transferencia bancaria, QR MP, link de pago, o débito/crédito.<br>
+          El ALIAS te identifica en MP. Sube tu comprobante abajo para confirmar.
+        </p>
+      </div>`;
+    proofArea.style.display = 'block';
+  } else if (method === 'contra_entrega') {
+    instEl.innerHTML = `
+      <div style="background:#fff8e8; border-radius:20px; padding:16px; border:2px solid #ff9f0a;">
+        <p style="font-weight:800; color:#7a4f00; margin-bottom:8px;">🏠 Pago Contra Entrega</p>
+        <p style="font-size:13px; font-weight:700; color:#7a4f00;">
+          Pagas cuando recibes tu pijama. El repartidor aceptará efectivo.<br><br>
+          <span style="font-size:12px;">⚠️ Tendrás que tomar una foto del dinero/recibo en el momento de la entrega y subirla aquí como confirmación del pedido.</span>
+        </p>
+      </div>`;
+    proofArea.style.display = 'block';
+    document.querySelector('#proof-upload-area > p').textContent = '📎 Foto del Pago (al momento de entrega)';
+  }
+}
+
+let proofFile = null;
+function handleProofUpload(event) {
+  proofFile = event.target.files[0];
+  if (!proofFile) return;
+  const preview = document.getElementById('proof-preview');
+  if (proofFile.type.startsWith('image/')) {
+    const url = URL.createObjectURL(proofFile);
+    preview.innerHTML = `<img src="${url}" style="max-width:100%; max-height:200px; border-radius:12px; object-fit:cover;">
+      <p style="font-size:12px; font-weight:700; color:var(--green); margin-top:6px;">✓ Comprobante listo: ${proofFile.name}</p>`;
+  } else {
+    preview.innerHTML = `<div style="background:#f0f0f5; border-radius:12px; padding:12px; text-align:center;">
+      <span style="font-size:24px;">📄</span>
+      <p style="font-size:12px; font-weight:700; color:var(--green); margin-top:4px;">✓ ${proofFile.name}</p>
+    </div>`;
+  }
+}
+
+async function submitOrder(total, currCode) {
+  if (!selectedPayment) return showToast('Elige un método de pago', 'warn');
+  const name = document.getElementById('co-name').value.trim();
+  const email = document.getElementById('co-email').value.trim();
+  const phone = document.getElementById('co-phone').value.trim();
+  const address = document.getElementById('co-address').value.trim();
+  if (!name || !email || !phone || !address) return showToast('Completa todos tus datos', 'warn');
+
+  // For non-contra_entrega, require proof
+  if (selectedPayment !== 'contra_entrega' && !proofFile) {
+    return showToast('Sube el comprobante de pago', 'warn');
+  }
+
+  const order = {
+    customer_name: name,
+    customer_email: email,
+    customer_phone: phone,
+    customer_address: address,
+    items: state.cart.map(i => ({
+      id: i.id, name: i.name, qty: i.qty,
+      price: state.country === 'BO' ? i.price_bob : i.price_ars
+    })),
+    total_bob: state.country === 'BO' ? total : null,
+    total_ars: state.country === 'AR' ? total : null,
+    currency: currCode,
+    payment_method: selectedPayment,
+    payment_status: selectedPayment === 'contra_entrega' ? 'pending_delivery' : 'pending_proof',
+    country: state.country
+  };
+
+  try {
+    if (supabase && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+      // Upload proof if present
+      if (proofFile) {
+        const filename = `proofs/${Date.now()}_${proofFile.name}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('order-proofs').upload(filename, proofFile);
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('order-proofs').getPublicUrl(filename);
+          order.payment_proof_url = urlData.publicUrl;
+        }
+      }
+      const { data, error } = await supabase.from('orders').insert([order]).select().single();
+      if (error) throw error;
+      order.id = data.id;
+      // Reduce stock
+      for (const item of state.cart) {
+        const prod = state.products.find(p => p.id === item.id);
+        if (prod) {
+          const newStock = prod.stock - item.qty;
+          await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
+        }
+      }
+    } else {
+      // Demo mode
+      order.id = 'DEMO-' + Math.random().toString(36).substr(2,6).toUpperCase();
+    }
+    showOrderConfirmation(order, total, currCode);
+  } catch(err) {
+    console.error(err);
+    showToast('Error al procesar el pedido. Intenta de nuevo.', 'error');
+  }
+}
+
+function showOrderConfirmation(order, total, currCode) {
+  const curr = currCode === 'BOB' ? 'Bs.' : '$';
+  document.getElementById('checkout-content').innerHTML = `
+    <div style="text-align:center; padding:20px 0;">
+      <div style="font-size:72px; margin-bottom:16px; animation:bounce 1s ease infinite;">🎉</div>
+      <h2 style="font-size:26px; font-weight:900; margin-bottom:8px;">¡Pedido Confirmado!</h2>
+      <p style="color:var(--text-sec); font-weight:600; margin-bottom:24px;">Gracias por tu compra, ${order.customer_name?.split(' ')[0]} 💖</p>
+      
+      <div style="background:#f9f9fb; border-radius:20px; padding:20px; text-align:left; margin-bottom:20px;">
+        <p style="font-size:11px; font-weight:700; color:var(--text-sec); margin-bottom:12px; text-transform:uppercase; letter-spacing:1px;">RECIBO DE COMPRA</p>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:700; color:var(--text-sec);">Nro. Pedido</span>
+          <span style="font-size:13px; font-weight:900; font-family:monospace;">${order.id}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:700; color:var(--text-sec);">Fecha</span>
+          <span style="font-size:13px; font-weight:900;">${new Date().toLocaleDateString('es-BO')}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:700; color:var(--text-sec);">Método de pago</span>
+          <span style="font-size:13px; font-weight:900;">${{ qr_bolivia:'QR Bolivia', mercadopago:'MercadoPago', contra_entrega:'Contra Entrega' }[order.payment_method]}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding-top:12px; border-top:2px solid #e8e8ed; margin-top:8px;">
+          <span style="font-size:16px; font-weight:900;">TOTAL</span>
+          <span style="font-size:20px; font-weight:900; color:var(--accent);">${curr} ${total.toLocaleString()} ${currCode}</span>
+        </div>
+      </div>
+
+      <div style="background:#e8f8f0; border-radius:16px; padding:14px; margin-bottom:20px; text-align:left;">
+        <p style="font-size:13px; font-weight:800; color:#1a7f3a; margin-bottom:6px;">📲 ¿Qué sigue?</p>
+        ${order.payment_method === 'contra_entrega' 
+          ? '<p style="font-size:12px; font-weight:600; color:#1a7f3a;">Te contactaremos por WhatsApp para coordinar la entrega. Ten el efectivo listo.</p>'
+          : '<p style="font-size:12px; font-weight:600; color:#1a7f3a;">Revisaremos tu comprobante y confirmaremos el pedido. Te notificaremos por email/WhatsApp.</p>'}
+      </div>
+
+      <button onclick="closeModal('checkout-modal'); state.cart=[]; updateCartUI();"
+        class="w-full py-4 rounded-2xl font-black text-white text-lg"
+        style="background:linear-gradient(135deg,#FF6B8A,#FF9F5B);">
+        ¡Perfecto! Seguir Comprando →
+      </button>
+    </div>`;
+  proofFile = null;
+  selectedPayment = '';
+  state.cart = [];
+  updateCartUI();
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function showModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('show');
+  document.body.style.overflow = '';
+}
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => {
+    if (e.target === el) closeModal(el.id);
+  });
+});
+
+// ============================================================
+// AI ASSISTANT
+// ============================================================
+let aiOpen = false;
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-chat').classList.toggle('open', aiOpen);
+  document.getElementById('ai-btn-icon').textContent = aiOpen ? '✕' : '🤖';
+}
+
+async function sendAIMessage() {
+  const input = document.getElementById('ai-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addAIMessage(msg, 'user');
+  addAIMessage('...', 'bot', 'ai-typing');
+  
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `Eres el asistente de PijamaKids, una tienda de pijamas para niños. 
+Ayuda a los clientes a encontrar el producto perfecto. 
+Productos disponibles:
+${state.products.map(p => `- ${p.name} (Talla ${p.size}, ${p.category}): Bs. ${p.price_bob} / $${p.price_ars} ARS, Stock: ${p.stock} unidades`).join('\n')}
+
+El cliente está en ${state.country === 'BO' ? 'Bolivia' : 'Argentina'}.
+Sé breve, amigable y usa emojis. Si el cliente quiere un producto, dile su nombre exacto para que lo busque.
+Habla siempre en español.`,
+        messages: [{ role: 'user', content: msg }]
+      })
+    });
+    const data = await resp.json();
+    const typing = document.getElementById('ai-typing');
+    if (typing) typing.remove();
+    addAIMessage(data.content?.[0]?.text || 'No pude procesar tu consulta. Intenta de nuevo.', 'bot');
+  } catch(e) {
+    const typing = document.getElementById('ai-typing');
+    if (typing) typing.remove();
+    // Fallback response without API
+    const reply = getLocalAIReply(msg);
+    addAIMessage(reply, 'bot');
+  }
+}
+
+function getLocalAIReply(msg) {
+  const m = msg.toLowerCase();
+  if (m.includes('rosa') || m.includes('niña') || m.includes('osa')) {
+    const prods = state.products.filter(p => p.category === 'osa');
+    return `¡Para niñas te recomiendo nuestra Osa Rosa! 🩷 Tenemos:\n${prods.map(p => `• ${p.name}: Bs. ${p.price_bob}`).join('\n')}\n¡Son super tiernas y abrigaditas!`;
+  }
+  if (m.includes('café') || m.includes('niño') || m.includes('oso')) {
+    const prods = state.products.filter(p => p.category === 'oso');
+    return `¡Para niños tenemos el Oso Café! 🤎\n${prods.map(p => `• ${p.name}: Bs. ${p.price_bob}`).join('\n')}\n¡Les encantará!`;
+  }
+  if (m.includes('pikachu') || m.includes('pokemon') || m.includes('amarillo')) {
+    const prods = state.products.filter(p => p.category === 'pikachu');
+    return `¡Nuestro Pikachu es un éxito! ⚡💛\n${prods.map(p => `• ${p.name}: Bs. ${p.price_bob}`).join('\n')}\n¡Perfecto para fans de Pokémon!`;
+  }
+  if (m.includes('monstruo') || m.includes('rojo') || m.includes('dinosaurio')) {
+    const prods = state.products.filter(p => p.category === 'monstruo');
+    return `¡El Monstruo Rojo es el más divertido! ❤️👹\n${prods.map(p => `• ${p.name}: Bs. ${p.price_bob}`).join('\n')}`;
+  }
+  if (m.includes('precio') || m.includes('cuánto') || m.includes('cuanto')) {
+    return `Nuestros precios van de Bs. 180 a Bs. 225 (BOB) 💰\nTenemos pijamas Osa Rosa 🩷, Oso Café 🤎, Monstruo Rojo ❤️ y Pikachu 💛\n¿Cuál te interesa?`;
+  }
+  if (m.includes('talla') || m.includes('talle') || m.includes('tamaño')) {
+    return `Manejamos tallas S (1-2 años) y M (2-3 años) 📏\n¿Para qué edad es el niño? Te ayudo a elegir.`;
+  }
+  return `¡Hola! 👋 Tengo pijamas disponibles en 4 modelos:\n🩷 Osa Rosa (niñas)\n🤎 Oso Café (niños)\n❤️ Monstruo Rojo\n💛 Pikachu\n\nTodas en tallas S y M. ¿Cuál te llama la atención?`;
+}
+
+function addAIMessage(text, role, id = '') {
+  const container = document.getElementById('ai-messages');
+  const isBot = role === 'bot';
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = `
+    background:${isBot ? '#f5f5f7' : 'linear-gradient(135deg,#667eea,#764ba2)'};
+    color:${isBot ? '#1d1d1f' : '#fff'};
+    border-radius:${isBot ? '16px 16px 16px 4px' : '16px 16px 4px 16px'};
+    padding:10px 14px;
+    font-size:13px; font-weight:600;
+    max-width:85%;
+    white-space:pre-line;
+    line-height:1.5;
+    ${isBot ? '' : 'margin-left:auto;'}
+  `;
+  div.textContent = text === '...' ? '●  ●  ●' : text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// ============================================================
+// ADMIN
+// ============================================================
+async function checkAdminSession() {
+  if (!supabase || SUPABASE_URL === 'YOUR_SUPABASE_URL') return;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    state.isAdmin = true;
+  }
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      state.isAdmin = true;
+      enterAdmin();
+    }
+  });
+}
+
+function showAdminLogin() {
+  if (state.isAdmin) return enterAdmin();
+  // Demo mode entry
+  if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+    state.isAdmin = true;
+    enterAdmin();
+    return;
+  }
+  showModal('admin-login-modal');
+}
+
+async function sendMagicLink() {
+  const email = document.getElementById('admin-email').value.trim();
+  if (!email) return showToast('Ingresa tu email', 'warn');
+  const status = document.getElementById('magic-link-status');
+  try {
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+    if (error) throw error;
+    status.textContent = '✅ ¡Enlace enviado! Revisa tu correo.';
+    status.style.color = 'var(--green)';
+  } catch(e) {
+    status.textContent = '❌ Error: ' + e.message;
+    status.style.color = '#ff3b30';
+  }
+}
+
+function enterAdmin() {
+  closeModal('admin-login-modal');
+  document.getElementById('admin-panel').style.display = 'block';
+  loadAdminProducts();
+  loadAdminStats();
+}
+
+function exitAdmin() {
+  document.getElementById('admin-panel').style.display = 'none';
+}
+
+function adminTab(tab, btn) {
+  document.querySelectorAll('#admin-panel .pill-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-products').style.display = tab === 'products' ? 'block' : 'none';
+  document.getElementById('tab-orders').style.display = tab === 'orders' ? 'block' : 'none';
+  document.getElementById('tab-config').style.display = tab === 'config' ? 'block' : 'none';
+  if (tab === 'orders') loadAdminOrders();
+}
+
+async function loadAdminProducts() {
+  const tbody = document.getElementById('admin-products-tbody');
+  const prods = state.products;
+  if (!prods.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">Sin productos</td></tr>'; return; }
+  
+  tbody.innerHTML = prods.map(p => `
+    <tr>
+      <td><img src="${p.image_url}" style="width:50px; height:60px; object-fit:cover; border-radius:8px;" onerror="this.style.background='#f0f0f5'; this.innerHTML='📷'"></td>
+      <td style="font-weight:700; font-size:13px;">${p.name}</td>
+      <td><span style="background:#f0f0f5; padding:4px 10px; border-radius:99px; font-size:12px; font-weight:700;">${CAT_ICONS[p.category]} ${CAT_NAMES[p.category]}</span></td>
+      <td style="font-weight:700;">${p.size}</td>
+      <td style="font-weight:800;">Bs. ${p.price_bob}</td>
+      <td>
+        <span class="stock-dot ${p.stock === 0 ? 'stock-out' : p.stock <= 5 ? 'stock-low' : 'stock-ok'}"></span>
+        <span style="font-size:13px; font-weight:700; margin-left:4px;">${p.stock}</span>
+        ${p.stock === 0 ? '<span style="color:#ff3b30;font-size:11px;font-weight:800;margin-left:4px;">¡RESTOCK!</span>' : ''}
+        ${p.stock > 0 && p.stock <= 5 ? '<span style="color:#ff9f0a;font-size:11px;font-weight:800;margin-left:4px;">BAJO</span>' : ''}
+      </td>
+      <td>
+        <span style="background:${p.active ? '#e8f8f0' : '#f5f5f7'}; color:${p.active ? '#1a7f3a' : '#999'}; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800;">
+          ${p.active ? '● Activo' : '○ Inactivo'}
+        </span>
+      </td>
+      <td>
+        <button onclick="editProduct('${p.id}')" style="background:none; border:none; color:var(--blue); font-weight:700; font-size:12px; cursor:pointer; padding:4px 8px;">Editar</button>
+        <button onclick="updateStock('${p.id}')" style="background:#f0f0f5; border:none; font-weight:700; font-size:12px; cursor:pointer; padding:4px 8px; border-radius:8px;">Stock</button>
+      </td>
+    </tr>`).join('');
+}
+
+function loadAdminStats() {
+  const prods = state.products;
+  document.getElementById('stat-products').textContent = prods.length;
+  document.getElementById('stat-outstock').textContent = prods.filter(p => p.stock === 0).length;
+  document.getElementById('stat-lowstock').textContent = prods.filter(p => p.stock > 0 && p.stock <= 5).length;
+  document.getElementById('stat-orders').textContent = '-';
+}
+
+async function loadAdminOrders() {
+  const tbody = document.getElementById('admin-orders-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">Cargando pedidos...</td></tr>';
+  try {
+    if (!supabase || SUPABASE_URL === 'YOUR_SUPABASE_URL') throw new Error('demo');
+    const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    document.getElementById('stat-orders').textContent = data.filter(o => new Date(o.created_at).toDateString() === new Date().toDateString()).length;
+    if (!data.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">Sin pedidos aún</td></tr>'; return; }
+    tbody.innerHTML = data.map(o => `
+      <tr>
+        <td style="font-size:11px; font-family:monospace; font-weight:700;">${o.id.substr(0,8)}...</td>
+        <td style="font-size:13px; font-weight:700;">${o.customer_name}</td>
+        <td>${o.country === 'BO' ? '🇧🇴' : '🇦🇷'} ${o.country}</td>
+        <td style="font-weight:800;">${o.currency === 'BOB' ? 'Bs.' : '$'} ${(o.total_bob || o.total_ars || 0).toLocaleString()}</td>
+        <td style="font-size:12px;">${{ qr_bolivia:'QR 📱', mercadopago:'MP 💳', contra_entrega:'Entrega 🏠' }[o.payment_method]}</td>
+        <td>
+          <span style="background:${o.payment_status === 'confirmed' ? '#e8f8f0' : o.payment_status === 'pending_proof' ? '#fff8e8' : '#f0f0f5'}; 
+            color:${o.payment_status === 'confirmed' ? '#1a7f3a' : o.payment_status === 'pending_proof' ? '#7a4f00' : '#666'};
+            padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800;">
+            ${{ confirmed:'✓ Confirmado', pending_proof:'⏳ Pendiente', pending_delivery:'🚚 Pendiente entrega', rejected:'✕ Rechazado' }[o.payment_status] || o.payment_status}
+          </span>
+        </td>
+        <td style="font-size:12px; color:var(--text-sec);">${new Date(o.created_at).toLocaleDateString('es-BO')}</td>
+        <td>
+          ${o.payment_status !== 'confirmed' ? `<button onclick="confirmOrder('${o.id}')" style="background:#e8f8f0; border:none; color:#1a7f3a; font-weight:700; font-size:12px; cursor:pointer; padding:4px 8px; border-radius:8px;">✓ Confirmar</button>` : ''}
+          ${o.payment_proof_url ? `<a href="${o.payment_proof_url}" target="_blank" style="color:var(--blue); font-size:12px; font-weight:700; margin-left:4px;">Ver comprobante</a>` : ''}
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">Conecta Supabase para ver pedidos reales</td></tr>';
+  }
+}
+
+async function confirmOrder(id) {
+  try {
+    const { error } = await supabase.from('orders').update({ payment_status: 'confirmed' }).eq('id', id);
+    if (error) throw error;
+    showToast('Pedido confirmado ✓', 'success');
+    loadAdminOrders();
+  } catch(e) {
+    showToast('Error al confirmar', 'error');
+  }
+}
+
+function showAddProduct() {
+  document.getElementById('product-form-area').style.display = 'block';
+  document.getElementById('product-form-title').textContent = 'Nuevo Producto';
+  document.getElementById('pf-editing-id').value = '';
+  ['pf-name','pf-price-bob','pf-price-ars','pf-stock','pf-desc','pf-image'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('product-form-area').scrollIntoView({ behavior: 'smooth' });
+}
+
+function editProduct(id) {
+  const p = state.products.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('product-form-area').style.display = 'block';
+  document.getElementById('product-form-title').textContent = 'Editar Producto';
+  document.getElementById('pf-editing-id').value = id;
+  document.getElementById('pf-name').value = p.name;
+  document.getElementById('pf-category').value = p.category;
+  document.getElementById('pf-size').value = p.size;
+  document.getElementById('pf-price-bob').value = p.price_bob;
+  document.getElementById('pf-price-ars').value = p.price_ars;
+  document.getElementById('pf-stock').value = p.stock;
+  document.getElementById('pf-desc').value = p.description;
+  document.getElementById('pf-image').value = p.image_url;
+  document.getElementById('product-form-area').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function updateStock(id) {
+  const p = state.products.find(x => x.id === id);
+  if (!p) return;
+  const qty = prompt(`Stock actual de "${p.name}": ${p.stock}\nIngresa el nuevo stock:`);
+  if (qty === null || isNaN(qty)) return;
+  const newStock = parseInt(qty);
+  try {
+    if (supabase && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+      const { error } = await supabase.from('products').update({ stock: newStock }).eq('id', id);
+      if (error) throw error;
+    }
+    p.stock = newStock;
+    loadAdminProducts();
+    renderProducts(state.filteredProducts);
+    showToast(`Stock actualizado: ${p.name} = ${newStock}`, 'success');
+    if (newStock === 0) showToast(`⚠️ Sin stock: ${p.name}`, 'warn');
+    else if (newStock <= state.config.lowStockThreshold) showToast(`⚠️ Stock bajo: ${p.name} (${newStock} unid.)`, 'warn');
+  } catch(e) {
+    showToast('Error al actualizar stock', 'error');
+  }
+}
+
+function autoConvertPrice() {
+  const bob = parseFloat(document.getElementById('pf-price-bob').value);
+  if (!isNaN(bob)) {
+    document.getElementById('pf-price-ars').value = Math.round(bob * state.config.rateARS);
+  }
+}
+
+async function saveProduct() {
+  const editId = document.getElementById('pf-editing-id').value;
+  const product = {
+    name: document.getElementById('pf-name').value.trim(),
+    category: document.getElementById('pf-category').value,
+    size: document.getElementById('pf-size').value,
+    price_bob: parseFloat(document.getElementById('pf-price-bob').value),
+    price_ars: parseFloat(document.getElementById('pf-price-ars').value),
+    stock: parseInt(document.getElementById('pf-stock').value) || 0,
+    description: document.getElementById('pf-desc').value.trim(),
+    image_url: document.getElementById('pf-image').value.trim(),
+    active: true
+  };
+  if (!product.name || isNaN(product.price_bob)) return showToast('Completa nombre y precio', 'warn');
+  
+  try {
+    if (supabase && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+      if (editId) {
+        const { error } = await supabase.from('products').update(product).eq('id', editId);
+        if (error) throw error;
+        const idx = state.products.findIndex(p => p.id === editId);
+        if (idx >= 0) state.products[idx] = { ...state.products[idx], ...product };
+      } else {
+        const { data, error } = await supabase.from('products').insert([product]).select().single();
+        if (error) throw error;
+        state.products.push(data);
+      }
+    } else {
+      // Demo mode
+      if (editId) {
+        const idx = state.products.findIndex(p => p.id === editId);
+        if (idx >= 0) state.products[idx] = { ...state.products[idx], ...product };
+      } else {
+        state.products.push({ id: Date.now().toString(), ...product });
+      }
+    }
+    state.filteredProducts = [...state.products];
+    document.getElementById('product-form-area').style.display = 'none';
+    loadAdminProducts();
+    renderProducts(state.filteredProducts);
+    loadAdminStats();
+    showToast(editId ? 'Producto actualizado ✓' : 'Producto creado ✓', 'success');
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+function saveConfig() {
+  state.config.rateARS = parseFloat(document.getElementById('cfg-rate-ars').value) || state.config.rateARS;
+  state.config.qrUrl = document.getElementById('cfg-qr-bo').value;
+  state.config.mpLink = document.getElementById('cfg-mp-link').value;
+  state.config.mpAlias = document.getElementById('cfg-mp-alias').value;
+  state.config.lowStockThreshold = parseInt(document.getElementById('cfg-low-stock').value) || 5;
+  localStorage.setItem('pijamakids_config', JSON.stringify(state.config));
+  showToast('Configuración guardada ✓', 'success');
+}
+
+// Load config from localStorage
+try {
+  const saved = JSON.parse(localStorage.getItem('pijamakids_config') || '{}');
+  Object.assign(state.config, saved);
+  if (document.getElementById('cfg-rate-ars')) {
+    document.getElementById('cfg-rate-ars').value = state.config.rateARS;
+    document.getElementById('cfg-qr-bo').value = state.config.qrUrl || '';
+    document.getElementById('cfg-mp-link').value = state.config.mpLink || '';
+    document.getElementById('cfg-mp-alias').value = state.config.mpAlias || '';
+  }
+} catch(e) {}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg, type = '') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success:'✓', error:'✕', warn:'⚠️', '':'ℹ️' };
+  toast.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+</script>
+
+</body>
+</html>
