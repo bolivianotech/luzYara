@@ -263,6 +263,10 @@
      ========================================== -->
 <div id="admin-panel">
   <div class="max-w-6xl mx-auto px-4 py-6">
+    <!-- Banner modo demo -->
+    <div id="demo-banner" style="display:none;background:#fff3cd;border:2px solid #ffc107;border-radius:16px;padding:12px 20px;margin-bottom:20px;font-weight:700;font-size:13px;color:#856404;">
+      ⚠️ <strong>MODO DEMO</strong> — Supabase no configurado. Los datos son de prueba y no se guardan. Configurá tu Supabase para activar la tienda real.
+    </div>
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <div>
@@ -378,18 +382,28 @@
 </div>
 
 <!-- ADMIN LOGIN — triggered only from URL hash -->
-<div id="admin-gate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(12px);z-index:1200;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:28px;padding:36px;max-width:400px;width:90%;text-align:center;">
-    <div style="font-size:48px;margin-bottom:12px;">🔐</div>
-    <h2 style="font-size:22px;font-weight:900;margin-bottom:6px;">Acceso Restringido</h2>
-    <p style="color:var(--text-sec);font-size:13px;font-weight:600;margin-bottom:24px;">Ingresá tu email de administrador. Te enviaremos un enlace mágico.</p>
-    <input id="admin-email" type="email" placeholder="admin@pijamakids.com"
-      class="w-full px-4 py-3 rounded-2xl border-2 text-sm font-bold mb-4" style="border-color:#e8e8ed;">
-    <button onclick="sendMagicLink()" style="width:100%;padding:14px;border-radius:16px;background:var(--blue);color:#fff;border:none;font-weight:900;font-size:15px;cursor:pointer;">
-      Enviar Magic Link ✨
-    </button>
-    <div id="magic-link-status" class="mt-3 text-sm font-bold" style="min-height:20px;"></div>
-    <button onclick="closeAdminGate()" style="margin-top:12px;background:none;border:none;color:#aaa;font-size:13px;font-weight:600;cursor:pointer;">Cancelar</button>
+<div id="admin-gate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(16px);z-index:1200;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:28px;padding:40px 36px;max-width:400px;width:90%;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,0.25);">
+    <div style="font-size:52px;margin-bottom:12px;">🔐</div>
+    <h2 style="font-size:22px;font-weight:900;margin-bottom:6px;">Panel Admin</h2>
+    <p style="color:var(--text-sec);font-size:13px;font-weight:600;margin-bottom:24px;" id="gate-subtitle">Ingresá la contraseña de administrador.</p>
+    <div id="gate-password-mode">
+      <input id="admin-password" type="password" placeholder="Contraseña"
+        onkeydown="if(event.key==='Enter')checkAdminPassword()"
+        style="width:100%;padding:14px 16px;border-radius:16px;border:2px solid #e8e8ed;font-size:15px;font-weight:700;margin-bottom:12px;outline:none;box-sizing:border-box;">
+      <button onclick="checkAdminPassword()" style="width:100%;padding:14px;border-radius:16px;background:#ff6b35;color:#fff;border:none;font-weight:900;font-size:15px;cursor:pointer;">
+        Entrar →
+      </button>
+    </div>
+    <div id="gate-magic-mode" style="display:none;">
+      <input id="admin-email" type="email" placeholder="admin@pijamakids.com"
+        style="width:100%;padding:14px 16px;border-radius:16px;border:2px solid #e8e8ed;font-size:15px;font-weight:700;margin-bottom:12px;outline:none;box-sizing:border-box;">
+      <button onclick="sendMagicLink()" style="width:100%;padding:14px;border-radius:16px;background:var(--blue);color:#fff;border:none;font-weight:900;font-size:15px;cursor:pointer;">
+        Enviar Magic Link ✨
+      </button>
+    </div>
+    <div id="magic-link-status" style="margin-top:12px;font-size:13px;font-weight:700;min-height:20px;color:#ff3b30;"></div>
+    <button onclick="closeAdminGate()" style="margin-top:16px;background:none;border:none;color:#bbb;font-size:13px;font-weight:600;cursor:pointer;">← Volver a la tienda</button>
   </div>
 </div>
 
@@ -400,12 +414,17 @@
 const SUPABASE_URL = 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 const ADMIN_ROUTE = '/admin'; // URL secreta: tudominio.netlify.app/admin
+const ADMIN_PASSWORD = 'pijama2025'; // Cambiá esto por tu contraseña
 
-let sbClient;
-try {
-  sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} catch(e) {
-  console.warn('Demo mode');
+const DEMO_MODE = (SUPABASE_URL === 'YOUR_SUPABASE_URL');
+
+let sbClient = null;
+if (!DEMO_MODE) {
+  try {
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch(e) {
+    console.warn('Supabase init failed, running in demo mode');
+  }
 }
 
 // ============================================================
@@ -441,12 +460,24 @@ const CAT_NAMES = { osa:'Osa Rosa', oso:'Oso Café', monstruo:'Monstruo Rojo', p
 // ============================================================
 function checkRoute() {
   const path = window.location.pathname;
-  const isAdminRoute = path === ADMIN_ROUTE || path === ADMIN_ROUTE + '/';
+  const hash = window.location.hash;
+  const search = window.location.search;
+  // Soporta: /admin  /admin/  /?admin  #admin  #/admin
+  const isAdminRoute = 
+    path === ADMIN_ROUTE || 
+    path === ADMIN_ROUTE + '/' ||
+    hash === '#/admin' ||
+    hash === '#admin' ||
+    search.includes('admin');
+  
   if (isAdminRoute) {
-    // Hide store, show admin gate
-    document.getElementById('navbar').style.display = 'none';
-    document.querySelector('main').style.display = 'none';
-    document.getElementById('ai-btn').style.display = 'none';
+    // Ocultar tienda completamente
+    const navbar = document.getElementById('navbar');
+    const mainEl = document.querySelector('main');
+    const aiBtn = document.getElementById('ai-btn');
+    if (navbar) navbar.style.display = 'none';
+    if (mainEl) mainEl.style.display = 'none';
+    if (aiBtn) aiBtn.style.display = 'none';
     checkAdminSession();
   } else {
     // Normal store — admin panel stays hidden
@@ -467,7 +498,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 async function loadProducts() {
   try {
-    if (!sbClient || SUPABASE_URL === 'YOUR_SUPABASE_URL') throw new Error('demo');
+    if (!sbClient || DEMO_MODE) throw new Error('demo');
     const { data, error } = await sbClient.from('products').select('*').eq('active', true);
     if (error) throw error;
     state.products = data;
@@ -742,7 +773,7 @@ async function submitOrder(total) {
   };
 
   try {
-    if (sbClient && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+    if (sbClient && !DEMO_MODE) {
       if (proofFile) {
         const filename = `proofs/${Date.now()}_${proofFile.name}`;
         const { error: upErr } = await sbClient.storage.from('order-proofs').upload(filename, proofFile);
@@ -892,10 +923,13 @@ function addAIMessage(text, role, id='') {
 // ADMIN — acceso solo por URL /admin
 // ============================================================
 async function checkAdminSession() {
-  // Show the gate screen always when navigating to /admin
-  if (!sbClient || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
-    // Demo mode: entrar directo
-    enterAdmin();
+  // Demo mode (Supabase no configurado): pedir contraseña
+  if (DEMO_MODE || !sbClient) {
+    if (sessionStorage.getItem('pk_admin') === '1') {
+      enterAdmin();
+    } else {
+      showAdminGate();
+    }
     return;
   }
   const { data: { session } } = await sbClient.auth.getSession();
@@ -913,6 +947,34 @@ async function checkAdminSession() {
 function showAdminGate() {
   const gate = document.getElementById('admin-gate');
   gate.style.display = 'flex';
+  // Choose login mode based on Supabase config
+  if (DEMO_MODE) {
+    document.getElementById('gate-password-mode').style.display = 'block';
+    document.getElementById('gate-magic-mode').style.display = 'none';
+    document.getElementById('gate-subtitle').textContent = 'Ingresá la contraseña de administrador.';
+  } else {
+    document.getElementById('gate-password-mode').style.display = 'none';
+    document.getElementById('gate-magic-mode').style.display = 'block';
+    document.getElementById('gate-subtitle').textContent = 'Ingresá tu email. Te enviaremos un Magic Link.';
+  }
+  // Focus input
+  setTimeout(() => {
+    const inp = DEMO_MODE ? document.getElementById('admin-password') : document.getElementById('admin-email');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function checkAdminPassword() {
+  const pwd = document.getElementById('admin-password').value;
+  const status = document.getElementById('magic-link-status');
+  if (pwd === ADMIN_PASSWORD) {
+    sessionStorage.setItem('pk_admin', '1');
+    enterAdmin();
+  } else {
+    status.textContent = '❌ Contraseña incorrecta';
+    document.getElementById('admin-password').value = '';
+    document.getElementById('admin-password').focus();
+  }
 }
 function closeAdminGate() {
   window.location.pathname = '/';
@@ -940,6 +1002,10 @@ function enterAdmin() {
   document.getElementById('navbar').style.display = 'none';
   document.querySelector('main').style.display = 'none';
   document.getElementById('ai-btn').style.display = 'none';
+  // Mostrar banner demo si Supabase no está configurado
+  if (DEMO_MODE) {
+    document.getElementById('demo-banner').style.display = 'block';
+  }
   loadAdminProducts();
   loadAdminStats();
   loadSavedConfig();
@@ -951,7 +1017,8 @@ function exitAdmin() {
 }
 
 async function adminLogout() {
-  if (sbClient && SUPABASE_URL !== 'YOUR_SUPABASE_URL') await sbClient.auth.signOut();
+  sessionStorage.removeItem('pk_admin');
+  if (sbClient && !DEMO_MODE) await sbClient.auth.signOut();
   window.location.href = '/';
 }
 
@@ -1000,7 +1067,7 @@ function loadAdminProducts() {
 async function loadAdminOrders() {
   const tbody = document.getElementById('admin-orders-tbody');
   try {
-    if (!sbClient || SUPABASE_URL === 'YOUR_SUPABASE_URL') throw new Error('demo');
+    if (!sbClient || DEMO_MODE) throw new Error('demo');
     const { data, error } = await sbClient.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
     if (error) throw error;
     const todayOrders = data.filter(o => new Date(o.created_at).toDateString() === new Date().toDateString()).length;
@@ -1065,7 +1132,7 @@ async function updateStock(id) {
   if (qty === null || isNaN(qty)) return;
   const newStock = parseInt(qty);
   try {
-    if (sbClient && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+    if (sbClient && !DEMO_MODE) {
       const { error } = await sbClient.from('products').update({ stock: newStock }).eq('id', id);
       if (error) throw error;
     }
@@ -1093,7 +1160,7 @@ async function saveProduct() {
   };
   if (!product.name || isNaN(product.price_ars)) return showToast('Completá nombre y precio', 'warn');
   try {
-    if (sbClient && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+    if (sbClient && !DEMO_MODE) {
       if (editId) {
         const { error } = await sbClient.from('products').update(product).eq('id', editId);
         if (error) throw error;
