@@ -1,0 +1,281 @@
+diff --git a/index.html b/index.html
+index e570cde..5577daf 100644
+--- a/index.html
++++ b/index.html
+@@ -773,8 +773,10 @@
+ // ============================================================
+ // CONFIGURATION — Replace with your actual values
+ // ============================================================
+-const SUPABASE_URL = 'https://usbnyhlsagyykcjbaoad.supabase.co'; // e.g. https://xxx.supabase.co
+-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzYm55aGxzYWd5eWtjamJhb2FkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5OTEwMDUsImV4cCI6MjA4NzU2NzAwNX0.P735r0q56ST_1sHnO4dYAR6uER3JfbIkM3L7uloZsSI';
++// Proyecto Supabase — Fase 1 (proyecto NUEVO). Instrucciones: docs/FASE-1-PAGOS-MERCADOPAGO.md
++const SUPABASE_URL = 'YOUR_SUPABASE_URL';            // https://xxxxxxxxxxxx.supabase.co
++const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';  // Project Settings → API → anon public
++const FUNCTIONS_BASE = SUPABASE_URL + '/functions/v1';
+ 
+ // Init Supabase
+ let sbClient;
+@@ -870,6 +872,7 @@ window.addEventListener('DOMContentLoaded', async () => {
+   updateCartUI();
+   updateCurrencyInfo();
+   checkAdminSession();
++  checkMercadoPagoReturn();
+ });
+ 
+ async function loadProducts() {
+@@ -1178,7 +1181,7 @@ function proceedToCheckout() {
+         <span style="font-size:32px;">💳</span>
+         <div>
+           <p style="font-weight:800; font-size:14px;">MercadoPago (Argentina)</p>
+-          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Transferencia o link de pago. Deberás subir comprobante.</p>
++          <p style="font-size:12px; color:var(--text-sec); font-weight:600;">Checkout oficial: tarjeta, débito o dinero en cuenta. Confirmación automática.</p>
+         </div>
+       </div>
+       <div class="payment-card" id="pm-ce" onclick="selectPayment('contra_entrega')">
+@@ -1258,13 +1261,8 @@ let selectedPayment = '';
+ function selectPayment(method) {
+   selectedPayment = method;
+   document.querySelectorAll('.payment-card').forEach(c => c.classList.remove('selected'));
+-  const btn = document.getElementById(`pm-${method.replace('_', '-').split('_')[0]}`);
+-  if (btn) btn.classList.add('selected');
+-  
+-  // Also check for contra_entrega
+-  if (method === 'contra_entrega') {
+-    document.getElementById('pm-ce')?.classList.add('selected');
+-  }
++  const card = document.querySelector(`.payment-card[onclick*="selectPayment('${method}')"]`);
++  if (card) card.classList.add('selected');
+ 
+   showPaymentInstructions(method);
+ }
+@@ -1290,22 +1288,15 @@ function showPaymentInstructions(method) {
+       </div>`;
+     proofArea.style.display = 'block';
+   } else if (method === 'mercadopago') {
+-    const link = state.config.mpLink || '#';
+-    const alias = state.config.mpAlias || 'Configura alias en el panel admin';
+     instEl.innerHTML = `
+       <div style="background:#e8f0fd; border-radius:20px; padding:16px; border:2px solid #0071e3;">
+         <p style="font-weight:800; color:#004a9f; margin-bottom:8px;">💳 Pago con MercadoPago</p>
+-        <p style="font-size:13px; font-weight:700; color:#004a9f; margin-bottom:10px;">
+-          Alias: <span style="font-size:16px; background:#fff; padding:4px 12px; border-radius:99px;">${alias}</span>
+-        </p>
+-        ${link !== '#' ? `<a href="${link}" target="_blank" style="display:block; background:#009ee3; color:#fff; text-align:center; padding:12px; border-radius:16px; font-weight:800; text-decoration:none; margin-bottom:10px;">→ Pagar con MercadoPago</a>` : 
+-        `<div style="background:#fff; border-radius:12px; padding:10px; text-align:center; font-size:13px; color:#666; font-weight:600; margin-bottom:10px;">Link de MercadoPago no configurado aún</div>`}
+-        <p style="font-size:12px; font-weight:700; color:#004a9f;">
+-          Opciones: transferencia bancaria, QR MP, link de pago, o débito/crédito.<br>
+-          El ALIAS te identifica en MP. Sube tu comprobante abajo para confirmar.
++        <p style="font-size:13px; font-weight:700; color:#004a9f;">
++          Al confirmar te llevamos al checkout oficial de MercadoPago. Podés pagar con tarjeta de crédito/débito o con dinero en tu cuenta.<br><br>
++          <span style="font-size:12px;">El pedido se confirma solo cuando MercadoPago aprueba el pago — no hace falta enviar comprobante.</span>
+         </p>
+       </div>`;
+-    proofArea.style.display = 'block';
++    proofArea.style.display = 'none';
+   } else if (method === 'contra_entrega') {
+     instEl.innerHTML = `
+       <div style="background:#fff8e8; border-radius:20px; padding:16px; border:2px solid #ff9f0a;">
+@@ -1345,8 +1336,13 @@ async function submitOrder(total, currCode) {
+   const address = document.getElementById('co-address').value.trim();
+   if (!name || !email || !phone || !address) return showToast('Completa todos tus datos', 'warn');
+ 
+-  // For non-contra_entrega, require proof
+-  if (selectedPayment !== 'contra_entrega' && !proofFile) {
++  // MercadoPago: pago real en el checkout oficial (no requiere comprobante)
++  if (selectedPayment === 'mercadopago') {
++    return startMercadoPagoCheckout({ name, email, phone, address });
++  }
++
++  // QR Bolivia: el comprobante es obligatorio
++  if (selectedPayment === 'qr_bolivia' && !proofFile) {
+     return showToast('Sube el comprobante de pago', 'warn');
+   }
+ 
+@@ -1356,15 +1352,14 @@ async function submitOrder(total, currCode) {
+     customer_phone: phone,
+     customer_address: address,
+     items: state.cart.map(i => ({
+-      id: i.id, name: i.name, qty: i.qty,
+-      price: state.country === 'BO' ? i.price_bob : i.price_ars
++      id: i.id, title: i.name, quantity: i.qty,
++      unit_price: state.country === 'BO' ? i.price_bob : i.price_ars
+     })),
+-    total_bob: state.country === 'BO' ? total : null,
+-    total_ars: state.country === 'AR' ? total : null,
++    subtotal: total,
+     currency: currCode,
++    country: state.country,
+     payment_method: selectedPayment,
+-    payment_status: selectedPayment === 'contra_entrega' ? 'pending_delivery' : 'pending_proof',
+-    country: state.country
++    payment_status: selectedPayment === 'contra_entrega' ? 'pending_delivery' : 'pending_proof'
+   };
+ 
+   try {
+@@ -1372,7 +1367,7 @@ async function submitOrder(total, currCode) {
+       // Upload proof if present
+       if (proofFile) {
+         const filename = `proofs/${Date.now()}_${proofFile.name}`;
+-        const { data: uploadData, error: uploadErr } = await sbClient.storage
++        const { error: uploadErr } = await sbClient.storage
+           .from('order-proofs').upload(filename, proofFile);
+         if (!uploadErr) {
+           const { data: urlData } = sbClient.storage.from('order-proofs').getPublicUrl(filename);
+@@ -1386,8 +1381,7 @@ async function submitOrder(total, currCode) {
+       for (const item of state.cart) {
+         const prod = state.products.find(p => p.id === item.id);
+         if (prod) {
+-          const newStock = prod.stock - item.qty;
+-          await sbClient.from('products').update({ stock: newStock }).eq('id', item.id);
++          await sbClient.from('products').update({ stock: Math.max(0, prod.stock - item.qty) }).eq('id', item.id);
+         }
+       }
+     } else {
+@@ -1680,13 +1674,13 @@ async function loadAdminOrders() {
+         <td style="font-size:11px; font-family:monospace; font-weight:700;">${o.id.substr(0,8)}...</td>
+         <td style="font-size:13px; font-weight:700;">${o.customer_name}</td>
+         <td>${o.country === 'BO' ? '🇧🇴' : '🇦🇷'} ${o.country}</td>
+-        <td style="font-weight:800;">${o.currency === 'BOB' ? 'Bs.' : '$'} ${(o.total_bob || o.total_ars || 0).toLocaleString()}</td>
++        <td style="font-weight:800;">${o.currency === 'BOB' ? 'Bs.' : '$'} ${(o.subtotal ?? o.total_bob ?? o.total_ars ?? 0).toLocaleString()}</td>
+         <td style="font-size:12px;">${{ qr_bolivia:'QR 📱', mercadopago:'MP 💳', contra_entrega:'Entrega 🏠' }[o.payment_method]}</td>
+         <td>
+           <span style="background:${o.payment_status === 'confirmed' ? '#e8f8f0' : o.payment_status === 'pending_proof' ? '#fff8e8' : '#f0f0f5'}; 
+             color:${o.payment_status === 'confirmed' ? '#1a7f3a' : o.payment_status === 'pending_proof' ? '#7a4f00' : '#666'};
+             padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800;">
+-            ${{ confirmed:'✓ Confirmado', pending_proof:'⏳ Pendiente', pending_delivery:'🚚 Pendiente entrega', rejected:'✕ Rechazado' }[o.payment_status] || o.payment_status}
++            ${{ confirmed:'✓ Confirmado', pending:'⏳ Esperando pago', pending_proof:'⏳ Pendiente', pending_delivery:'🚚 Pendiente entrega', rejected:'✕ Rechazado' }[o.payment_status] || o.payment_status}
+           </span>
+         </td>
+         <td style="font-size:12px; color:var(--text-sec);">${new Date(o.created_at).toLocaleDateString('es-BO')}</td>
+@@ -1851,6 +1845,131 @@ function showToast(msg, type = '') {
+     setTimeout(() => toast.remove(), 300);
+   }, 3500);
+ }
++
++// ============================================================
++// MERCADOPAGO — Checkout Pro real (vía Edge Functions de Supabase)
++// Ver docs/FASE-1-PAGOS-MERCADOPAGO.md
++// ============================================================
++async function startMercadoPagoCheckout(customer) {
++  if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
++    return showToast('MercadoPago aún no está configurado (ver docs/FASE-1-PAGOS-MERCADOPAGO.md)', 'warn');
++  }
++  const btn = document.querySelector('#checkout-content button[onclick^="submitOrder"]');
++  const label = btn ? btn.textContent : '';
++  if (btn) { btn.disabled = true; btn.textContent = 'Redirigiendo a MercadoPago…'; }
++  try {
++    const res = await fetch(`${FUNCTIONS_BASE}/mp-create-preference`, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
++        'apikey': SUPABASE_ANON_KEY
++      },
++      body: JSON.stringify({
++        items: state.cart.map(i => ({ id: i.id, qty: i.qty })),
++        customer,
++        origin: window.location.origin + window.location.pathname
++      })
++    });
++    const data = await res.json();
++    if (!res.ok || !data.init_point) throw new Error(data.error || 'No se pudo iniciar el pago');
++    sessionStorage.setItem('pk_mp_order', data.orderId);
++    window.location.href = data.init_point;
++  } catch (e) {
++    console.error(e);
++    showToast('MercadoPago: ' + e.message, 'error');
++    if (btn) { btn.disabled = false; btn.textContent = label || 'Confirmar Pedido 🚀'; }
++  }
++}
++
++function checkMercadoPagoReturn() {
++  const params = new URLSearchParams(window.location.search);
++  const mp = params.get('mp');
++  const orderId = params.get('order') || sessionStorage.getItem('pk_mp_order');
++  if (!mp || !orderId) return;
++  sessionStorage.removeItem('pk_mp_order');
++  history.replaceState({}, '', window.location.pathname);
++  state.cart = [];
++  updateCartUI();
++  showMercadoPagoResult(mp, orderId);
++}
++
++async function showMercadoPagoResult(mp, orderId) {
++  showModal('checkout-modal');
++  document.getElementById('checkout-content').innerHTML = `
++    <div style="text-align:center; padding:32px 0;">
++      <div class="spinner" style="margin:0 auto 18px; border-color:rgba(0,0,0,0.1); border-top-color:var(--blue);"></div>
++      <h2 style="font-size:22px; font-weight:900;">Verificando tu pago…</h2>
++      <p style="color:var(--text-sec); font-weight:600; margin-top:6px;">Pedido ${String(orderId).slice(0,8).toUpperCase()}</p>
++    </div>`;
++
++  let order = null;
++  if (sbClient && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
++    for (let i = 0; i < 20; i++) {
++      try {
++        const { data } = await sbClient.from('orders')
++          .select('payment_status,subtotal,currency,customer_name,mp_status_detail')
++          .eq('id', orderId).single();
++        if (data) { order = data; if (data.payment_status !== 'pending') break; }
++      } catch (e) {}
++      await new Promise(r => setTimeout(r, 2000));
++    }
++  }
++  renderMercadoPagoFinal(mp, orderId, order);
++}
++
++function renderMercadoPagoFinal(mp, orderId, order) {
++  const el = document.getElementById('checkout-content');
++  const ref = String(orderId).slice(0,8).toUpperCase();
++  const status = order?.payment_status || (mp === 'failure' ? 'rejected' : 'pending');
++  const total = order ? `$ ${Number(order.subtotal).toLocaleString()} ${order.currency || 'ARS'}` : '';
++  const firstName = order?.customer_name ? order.customer_name.split(' ')[0] : '';
++  const backBtn = `<button onclick="closeModal('checkout-modal')" class="w-full py-4 rounded-2xl font-black text-white text-lg" style="background:linear-gradient(135deg,#FF6B8A,#FF9F5B);">Seguir comprando →</button>`;
++
++  if (status === 'confirmed') {
++    el.innerHTML = `
++      <div style="text-align:center; padding:16px 0;">
++        <div style="font-size:64px; margin-bottom:12px; animation:bounce 1s ease infinite;">🎉</div>
++        <h2 style="font-size:24px; font-weight:900;">¡Pago aprobado!</h2>
++        <p style="color:var(--text-sec); font-weight:600; margin:6px 0 20px;">Gracias por tu compra${firstName ? ', ' + firstName : ''} 💖</p>
++        <div style="background:#f9f9fb; border-radius:20px; padding:18px; text-align:left; margin-bottom:16px;">
++          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
++            <span style="font-size:13px; font-weight:700; color:var(--text-sec);">Nro. Pedido</span>
++            <span style="font-size:13px; font-weight:900; font-family:monospace;">${ref}</span>
++          </div>
++          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
++            <span style="font-size:13px; font-weight:700; color:var(--text-sec);">Método</span>
++            <span style="font-size:13px; font-weight:900;">MercadoPago 💳</span>
++          </div>
++          <div style="display:flex; justify-content:space-between; padding-top:10px; border-top:2px solid #e8e8ed; margin-top:6px;">
++            <span style="font-size:16px; font-weight:900;">TOTAL</span>
++            <span style="font-size:18px; font-weight:900; color:var(--accent);">${total}</span>
++          </div>
++        </div>
++        <div style="background:#e8f8f0; border-radius:16px; padding:14px; text-align:left; margin-bottom:16px;">
++          <p style="font-size:12px; font-weight:700; color:#1a7f3a;">Te contactaremos por WhatsApp/email para coordinar el envío. 🚚</p>
++        </div>
++        ${backBtn}
++      </div>`;
++  } else if (status === 'rejected') {
++    el.innerHTML = `
++      <div style="text-align:center; padding:16px 0;">
++        <div style="font-size:64px; margin-bottom:12px;">❌</div>
++        <h2 style="font-size:24px; font-weight:900;">El pago no se completó</h2>
++        <p style="color:var(--text-sec); font-weight:600; margin:6px 0 20px;">${order?.mp_status_detail ? 'Motivo: ' + order.mp_status_detail : 'MercadoPago rechazó o cancelaste el pago.'}</p>
++        <p style="font-size:13px; color:var(--text-sec); font-weight:600; margin-bottom:16px;">Tu carrito sigue disponible. Podés intentar de nuevo.</p>
++        ${backBtn}
++      </div>`;
++  } else {
++    el.innerHTML = `
++      <div style="text-align:center; padding:16px 0;">
++        <div style="font-size:64px; margin-bottom:12px;">⏳</div>
++        <h2 style="font-size:24px; font-weight:900;">Pago en revisión</h2>
++        <p style="color:var(--text-sec); font-weight:600; margin:6px 0 20px;">MercadoPago está procesando el pago del pedido ${ref}. Te avisaremos apenas se acredite.</p>
++        ${backBtn}
++      </div>`;
++  }
++}
+ </script>
+ 
+ </body>
