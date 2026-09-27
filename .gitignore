@@ -14,3 +14,6 @@ desktop.ini
 
 # Supabase CLI
 supabase/.temp/
+
+# Herramientas locales de pruebas (navegador de QA)
+.gstack/

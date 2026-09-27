@@ -3,7 +3,14 @@
 // Dos tiendas de ejemplo con el mismo software y reglas distintas:
 //   luzyara        → Argentina, ARS, curva de 5
 //   prendasmichell → Bolivia, BOB, media docena y docena (ejemplo ficticio)
+//
+// Cuentas demo (no hay contraseña: en demo el login es inmediato):
+//   super@plataforma.demo      → superadmin: todas las tiendas (plataforma.html)
+//   duena@luzyara.demo         → solo el backoffice de LuzYara
+//   duena@prendasmichell.demo  → solo el backoffice de PrendasMichell
 // ============================================================
+window.DEMO_PLATFORM_ADMINS = ['super@plataforma.demo'];
+
 window.DEMO_TENANTS = {
   luzyara: {
     tenant: {
@@ -16,8 +23,11 @@ window.DEMO_TENANTS = {
       },
       sizes: ['S', 'M', 'L', 'XL'],
       packs: [{ key: 'curva', label: 'Curva', plural: 'Curvas', units: 5, discount_pct: 10 }],
-      low_stock_threshold: 5
+      low_stock_threshold: 5,
+      order_expiry_hours: 48,
+      payment_instructions: 'Transferencia o QR · Alias: luzyara.pijamas · Titular: LuzYara'
     },
+    admins: ['duena@luzyara.demo'],
     categories: [
       { id: 'c-osa', name: 'Osa Rosa', emoji: '🩷', sort: 1, active: true },
       { id: 'c-oso', name: 'Oso Café', emoji: '🤎', sort: 2, active: true },
@@ -58,8 +68,11 @@ window.DEMO_TENANTS = {
         { key: 'media-docena', label: 'Media docena', plural: 'Medias docenas', units: 6, discount_pct: 5 },
         { key: 'docena', label: 'Docena', plural: 'Docenas', units: 12, discount_pct: 10 }
       ],
-      low_stock_threshold: 6
+      low_stock_threshold: 6,
+      order_expiry_hours: 24,
+      payment_instructions: 'QR Simple o transferencia · Banco Unión · Cta. 1-0000000 · PrendasMichell'
     },
+    admins: ['duena@prendasmichell.demo'],
     categories: [
       { id: 'c-pij', name: 'Pijamas', emoji: '🌙', sort: 1, active: true }
     ],

@@ -26,7 +26,7 @@ Repositorio: <https://github.com/bolivianotech/luzYara>
 - **MENOR** `2.1.0`: funcionalidad nueva compatible (ej. galería de fotos).
 - **MAYOR** `3.0.0`: cambio grande que rompe compatibilidad (ej. nuevo esquema de base de datos).
 
-Historial: `v1.0.0` (PoC WhatsApp + curvas) → `v2.0.0` (multitenant + backoffice completo).
+Historial: `v1.0.0` (PoC WhatsApp + curvas) → `v2.0.0` (multitenant + backoffice completo) → `v2.1.0` (registro de pagos con OCR, vencimientos, consola de plataforma).
 
 ## Flujo diario (copiar y pegar)
 

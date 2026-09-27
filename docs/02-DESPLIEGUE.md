@@ -259,12 +259,21 @@ Manual completo del dueño: [03-MANUAL-BACKOFFICE.md](03-MANUAL-BACKOFFICE.md).
 
 - [ ] La tienda muestra LuzYara, precios en `$` (ARS) y botones `+ Curva x5`.
 - [ ] Desde el celular: agregar una curva → *Finalizar pedido* → se abre WhatsApp hacia +1 914 222 3263 con el pedido.
-- [ ] El pedido aparece en **📋 Pedidos** del backoffice.
-- [ ] **✓ Venta cerrada** descuenta 5 unidades del talle en **📊 Inventario**.
+- [ ] El pedido aparece en **📋 Pedidos → Pendientes de pago**.
+- [ ] **💰 Registrar pago** → *Elegir comprobante* completa los datos → guardar: el pedido pasa a *Pagado* y
+      **📊 Inventario** baja 5 unidades del talle.
+- [ ] Registrar el mismo comprobante en otro pedido muestra "Ese comprobante ya se registró en el pedido …".
+- [ ] `plataforma.html` con tu correo (superadmin) muestra todas las tiendas; con el correo del dueño dice
+      "no es superadministrador".
 - [ ] Subir una foto desde el celular en **👕 Productos** y verla en la tienda.
 - [ ] Ventana privada → `admin.html` pide login (nadie ve pedidos sin sesión).
 - [ ] Con un correo NO invitado, el login dice "Ese correo no está invitado".
 - [ ] `?tienda=prendasmichell` dice "Tienda no encontrada" (todavía no la diste de alta: ver 04-NUEVO-CLIENTE.md).
+
+## Actualizar una base que ya tenía la v2.0
+
+`supabase/schema.sql` se puede volver a correr: agrega las columnas y funciones nuevas sin perder datos
+(los pedidos `confirmado` pasan a `pagado`). **SQL Editor → New query → pegar todo `schema.sql` → Run.**
 
 ## Problemas frecuentes
 
@@ -275,4 +284,5 @@ Manual completo del dueño: [03-MANUAL-BACKOFFICE.md](03-MANUAL-BACKOFFICE.md).
 | "Email rate limit exceeded" | Límite del correo de Supabase: esperá 1 hora o configurá SMTP propio (2.5). |
 | "Tu usuario no administra esta tienda" | Falta el correo en `tenant_admins` de esa tienda (o en `platform_admins`). |
 | No sube la foto | La foto no es JPG/PNG/WEBP, o el usuario no es admin de esa tienda. |
+| "Lector de comprobantes" no carga | Necesita internet la primera vez (descarga ~5 MB). En redes muy lentas, completar a mano. |
 | Cambié `config.js` y no se ve | ¿Hiciste push a `main`? Cloudflare tarda ~1 min. Recargá con `Ctrl + F5`. |
