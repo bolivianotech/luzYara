@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Plataforma · Superadmin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- LOGIN -->
+<div id="login-view" class="admin-shell" style="display:none; max-width:440px; padding-top:80px;">
+  <div class="card" style="padding:28px;">
+    <div style="font-size:40px;">🏢</div>
+    <h1 style="font-size:24px; font-weight:900; margin:8px 0 4px;">Consola de plataforma</h1>
+    <div id="login-form">
+      <p style="color:var(--text-sec); font-size:14px; font-weight:600; margin-bottom:20px;">Solo superadministradores.</p>
+      <input id="login-email" type="email" placeholder="tu-correo@gmail.com" class="field" style="margin-bottom:12px;"
+        onkeydown="if(event.key==='Enter')sendLoginLink()">
+      <button class="btn btn-primary w-full" onclick="sendLoginLink()">Enviar enlace de acceso ✨</button>
+      <p id="login-status" class="hint" style="text-align:center; margin-top:12px;"></p>
+      <div id="demo-hint" style="display:none; margin-top:16px;">
+        <button class="btn btn-soft w-full" style="font-size:13px;" onclick="$('login-email').value='super@plataforma.demo'; sendLoginLink()">
+          Modo demo: entrar como super@plataforma.demo</button>
+      </div>
+    </div>
+    <div id="login-denied" style="display:none;">
+      <p style="color:#ff3b30; font-weight:700; margin:12px 0;"><span id="denied-email"></span> no es superadministrador.</p>
+      <button class="btn btn-soft w-full" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONSOLA -->
+<div id="platform-view" class="admin-shell" style="display:none;">
+  <div class="flex items-center justify-between gap-4 flex-wrap mb-6">
+    <div class="flex items-center gap-3">
+      <span style="font-size:36px;">🏢</span>
+      <div>
+        <h1 style="font-size:26px; font-weight:900; line-height:1.1;">Plataforma</h1>
+        <p style="color:var(--text-sec); font-weight:700; font-size:13px;">Superadmin · <span id="platform-user"></span></p>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-primary" onclick="openTenantForm()">+ Nueva tienda</button>
+      <button class="btn btn-soft" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <p id="demo-banner" class="card" style="display:none; background:#fff8e8; color:#7a4f00; font-weight:700; font-size:13px; margin-bottom:16px; padding:12px 16px;">
+    ⚠️ Modo demo: datos guardados solo en este navegador. <button class="underline" onclick="confirmClick(this, resetAllDemo)">Restablecer toda la demo</button>
+  </p>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="card"><p class="label">Tiendas activas</p><p id="kpi-tenants" class="text-3xl font-black">-</p></div>
+    <div class="card"><p class="label">Pendientes de pago</p><p id="kpi-pending" class="text-3xl font-black" style="color:var(--blue);">-</p></div>
+    <div class="card"><p class="label">Ventas pagadas (mes)</p><p id="kpi-paid" class="text-3xl font-black text-green-600">-</p></div>
+    <div class="card"><p class="label">Prendas en stock</p><p id="kpi-units" class="text-3xl font-black">-</p></div>
+  </div>
+
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div style="padding:16px 20px 0;"><h3 style="font-size:17px; font-weight:900;">Tiendas</h3></div>
+    <div style="overflow-x:auto;"><table class="admin-table" id="tenants-table"></table></div>
+  </div>
+  <p class="hint mt-3">Las ventas del mes se muestran en la moneda de cada tienda. Cada dueño solo puede entrar al backoffice de su propia tienda.</p>
+</div>
+
+<!-- NUEVA TIENDA -->
+<div id="tenant-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:640px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 style="font-size:22px; font-weight:900;">Nueva tienda</h2>
+      <button onclick="closeModal('tenant-modal')" class="text-gray-400 hover:text-gray-600 text-2xl" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div><label class="label" for="nt-name">Nombre</label><input id="nt-name" class="field" placeholder="PrendasMichell" oninput="$('nt-slug').value = slugify(this.value)"></div>
+      <div><label class="label" for="nt-slug">Identificador (URL)</label><input id="nt-slug" class="field" placeholder="prendasmichell"></div>
+      <div><label class="label" for="nt-currency">País y moneda</label><select id="nt-currency" class="field"></select></div>
+      <div><label class="label" for="nt-emoji">Emoji</label><input id="nt-emoji" class="field" value="🛍️" maxlength="4"></div>
+      <div><label class="label" for="nt-whatsapp">WhatsApp que recibe pedidos</label><input id="nt-whatsapp" type="tel" class="field" placeholder="+591 70000000"></div>
+      <div><label class="label" for="nt-packs">Venta por mayor</label>
+        <select id="nt-packs" class="field">
+          <option value="curva">Curva x5 −10 % (Argentina)</option>
+          <option value="docenas">Media docena −5 % + Docena −10 % (Bolivia)</option>
+          <option value="none">Solo por unidad</option>
+        </select></div>
+      <div><label class="label" for="nt-sizes">Talles</label><input id="nt-sizes" class="field" value="S, M, L, XL"></div>
+      <div><label class="label" for="nt-admin">Correo del dueño (admin)</label><input id="nt-admin" type="email" class="field" placeholder="dueño@correo.com"></div>
+    </div>
+    <p class="hint">Después, el dueño completa categorías, productos, fotos, datos de pago y banner desde su backoffice.</p>
+    <p id="nt-invite-hint" class="hint" style="display:none; color:#7a4f00;">Recordá invitar ese correo en Supabase → Authentication → Users → Send invitation.</p>
+    <div class="flex gap-3 mt-4">
+      <button class="btn btn-primary" style="padding:14px 28px;" onclick="createTenant()">Crear tienda</button>
+      <button class="btn btn-soft" onclick="closeModal('tenant-modal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMINISTRADORES DE UNA TIENDA -->
+<div id="admins-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="admins-title" style="font-size:20px; font-weight:900;">Administradores</h2>
+      <button onclick="closeModal('admins-modal')" class="text-gray-400 hover:text-gray-600 text-2xl" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="admins-list" class="mb-4"></div>
+    <div class="flex gap-2">
+      <input id="admins-new" type="email" class="field" placeholder="nuevo@correo.com" onkeydown="if(event.key==='Enter')addAdmin()">
+      <button class="btn btn-primary" onclick="addAdmin()">Agregar</button>
+    </div>
+    <p id="admins-invite-hint" class="hint" style="display:none;">Además invitá el correo en Supabase → Authentication → Users.</p>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/platform.js"></script>
+</body>
+</html>

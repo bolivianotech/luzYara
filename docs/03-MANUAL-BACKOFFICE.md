@@ -21,7 +21,7 @@ Arriba ves 4 números: **prendas en stock**, **talles sin stock**, **talles con 
   - `—` significa que ese producto no se vende en ese talle (se habilita desde **Productos → Editar**).
 - Filtrá por categoría con los botones o buscá por nombre.
 
-> El stock baja solo cuando marcás un pedido como **Venta cerrada**.
+> El stock baja solo cuando **registrás el pago** de un pedido.
 
 ## 👕 Productos — altas, fotos y talles
 
@@ -44,20 +44,37 @@ La anterior se borra sola.
 - Cambiá emoji, nombre, **orden** (1 aparece primero) o **Visible** → **Guardar** en esa fila.
 - Solo se puede eliminar una categoría vacía (sin productos).
 
-## 📋 Pedidos — cerrar ventas por WhatsApp
+## 📋 Pedidos — del WhatsApp al pago
 
-Cada vez que un cliente toca *Enviar pedido por WhatsApp* te llega el mensaje **y** queda el pedido acá.
+Cada vez que un cliente toca *Enviar pedido por WhatsApp* te llega el mensaje **y** queda el pedido acá,
+en **Pendientes de pago**.
 
 | Botón | Qué hace |
 |---|---|
-| 💬 **Contactar** | Abre WhatsApp con el cliente y un saludo con el número de pedido y el total. |
-| **Contactado** | Marca que ya le escribiste. |
-| ✓ **Venta cerrada** | Cobraste: confirma el pedido y **descuenta el stock**. Tocar dos veces. |
+| 💬 **Contactar** | Abre WhatsApp con el cliente: confirma disponibilidad y le manda tus **datos para el pago**. Marca el pedido como *Contactado*. |
+| 🔔 **Recordar pago** | Mensaje recordando el pedido y los datos para pagar. |
+| 💰 **Registrar pago** | Cuando llega el comprobante: se cargan sus datos, el pedido pasa a **Pagado** y **baja el stock**. |
 | **Cancelar** | El cliente no siguió. No toca el stock. |
 
-Filtrá por **Nuevos / Contactados / Cerrados / Cancelados / Todos** y tocá **🔄 Actualizar** para ver pedidos recientes.
+### Registrar el pago (con lectura automática del comprobante)
 
-> Los precios del pedido son los que vio el cliente. Antes de cobrar, confirmá el total por WhatsApp.
+1. El cliente te manda la captura del comprobante por WhatsApp. Guardala en el celular o la PC.
+2. En el pedido tocá **💰 Registrar pago** → **Elegir comprobante** → elegí la captura.
+3. En unos segundos se completan solos (en verde): **fecha y hora**, **nº de comprobante**, **banco**,
+   **nombre** y **cuenta** de quien pagó, y **monto**. La primera vez tarda un poco más (descarga el lector).
+4. **Revisá** los datos y corregí lo que haga falta. Si el monto no coincide con el pedido, aparece un aviso.
+5. **Guardar pago y cerrar venta**.
+
+- La imagen **no se guarda** en ningún lado: solo quedan los datos.
+- Un mismo comprobante no se puede usar en dos pedidos (evita pagos "reciclados").
+- Pago en efectivo: elegí *Efectivo*; el nº de recibo es opcional.
+
+### ¿Y si el cliente nunca paga?
+
+Pasadas las horas configuradas (48 h por defecto) el pedido pasa solo a **⌛ Vencido**. No descuenta stock.
+Si el cliente paga después, igual podés **Registrar pago** sobre el pedido vencido.
+
+Filtrá por **Pendientes de pago / Pagados / Vencidos / Cancelados / Todos** y tocá **🔄 Actualizar** para ver pedidos recientes.
 
 ## ⚙️ Configuración
 
@@ -68,5 +85,6 @@ Filtrá por **Nuevos / Contactados / Cerrados / Cancelados / Todos** y tocá **�
 | 💱 Moneda | ARS, BOB, CLP, PEN, UYU, PYG, MXN o USD. Cambia cómo se muestran los precios (no convierte montos: actualizá los precios a mano). |
 | 📦 Venta por mayor | Formas de venta con su cantidad y % de descuento. Botones rápidos: *Curva x5 (Argentina)*, *Media docena + Docena (Bolivia)*, *Solo por unidad*. |
 | 📏 Talles y stock | Lista de talles en orden (ej. `2, 4, 6, 8` o `S, M, L, XL`) y desde cuántas unidades avisar "stock bajo". |
+| 💳 Cobro y vencimiento | **Datos para el pago** (alias, CBU, cuenta, QR) que se envían al cliente, y en cuántas horas vence un pedido sin pago (0 = nunca). |
 
 Siempre terminá con **Guardar configuración**. Los cambios se ven en la tienda al recargarla.

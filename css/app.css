@@ -351,3 +351,6 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 640px) {
   .pack-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* Campo completado por el lector de comprobantes */
+.field.ocr-hit { border-color: #30d158; background: #f2fbf5; }

@@ -549,7 +549,41 @@ function showOrderSent(order, url) {
           <span style="font-size:20px; font-weight:900; color:var(--accent);">${fmt(order.total)}</span>
         </div>
       </div>
+      ${S.tenant.payment_instructions ? `
+      <div style="background:#f5f9ff; border-radius:20px; padding:16px; text-align:left; margin-bottom:20px;">
+        <p style="font-size:13px; font-weight:900; margin-bottom:6px;">💳 Datos para el pago</p>
+        <p style="font-size:13px; font-weight:700; white-space:pre-line;">${esc(S.tenant.payment_instructions)}</p>
+        <p style="font-size:12px; color:var(--text-sec); font-weight:600; margin-top:8px;">
+          Cuando ${esc(S.tenant.name)} te confirme la disponibilidad, pagá y mandá el comprobante por el mismo chat.
+          ${S.tenant.order_expiry_hours ? `El pedido se reserva ${S.tenant.order_expiry_hours} h.` : ''}
+        </p>
+      </div>` : ''}
       <a href="${esc(url)}" target="_blank" rel="noopener" class="btn-wa block w-full py-4 rounded-2xl font-black text-lg mb-2">¿No se abrió? Abrir WhatsApp</a>
       <button onclick="closeModal('checkout-modal')" class="w-full py-3 rounded-2xl font-bold text-sm bg-gray-100">Seguir comprando</button>
+      ${suggestionsHtml(order)}
+    </div>`;
+}
+
+// "Te puede interesar": productos con stock que no estaban en el pedido, primero de las mismas categorías
+function suggestionsHtml(order) {
+  const bought = new Set(order.items.map(i => String(i.product_id)));
+  const cats = new Set(order.items.map(i => String(S.products.find(p => sameId(p.id, i.product_id))?.category_id)));
+  const list = S.products
+    .filter(p => !bought.has(String(p.id)) && productStock(p) > 0)
+    .sort((a, b) => cats.has(String(b.category_id)) - cats.has(String(a.category_id)))
+    .slice(0, 4);
+  if (!list.length) return '';
+  return `
+    <div style="text-align:left; margin-top:24px;">
+      <p style="font-size:15px; font-weight:900; margin-bottom:10px;">Te puede interesar ✨</p>
+      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px;">
+        ${list.map(p => `
+          <button onclick="closeModal('checkout-modal'); showProductDetail('${p.id}')"
+            style="text-align:left; background:#f9f9fb; border:none; border-radius:16px; padding:8px; cursor:pointer; font-family:inherit;">
+            <img src="${esc(p.image_url)}" alt="" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:12px;">
+            <p style="font-size:12px; font-weight:800; margin-top:6px;">${esc(p.name)}</p>
+            <p style="font-size:13px; font-weight:900; color:var(--accent);">${fmt(p.price)}</p>
+          </button>`).join('')}
+      </div>
     </div>`;
 }

@@ -1,5 +1,5 @@
 -- ============================================================
---  Tienda WhatsApp — Esquema MULTITENANT (v2)
+--  Tienda WhatsApp — Esquema MULTITENANT (v2.1)
 --  Una sola base de datos para varias tiendas (LuzYara, PrendasMichell, ...).
 --  Cada fila pertenece a una tienda (tenant_id) y las políticas RLS impiden
 --  que el admin de una tienda vea o toque los datos de otra.
@@ -226,31 +226,110 @@ create policy "orders_admin_update" on public.orders for update to authenticated
   using (public.is_tenant_admin(tenant_id)) with check (public.is_tenant_admin(tenant_id));
 
 -- ------------------------------------------------------------
---  confirm_order — "Venta cerrada": confirma el pedido y descuenta
---  el stock de cada talle en una sola operación.
+--  v2.1 — CIERRE DEL CICLO DE VENTA: pago registrado con los datos
+--  del comprobante (sin guardar la imagen) y vencimiento de pedidos.
+--  Estados: nuevo → contactado → pagado  |  vencido (sin pago a tiempo)  |  cancelado
 -- ------------------------------------------------------------
-create or replace function public.confirm_order(p_order uuid)
+alter table public.tenants add column if not exists order_expiry_hours int not null default 48
+  check (order_expiry_hours >= 0);                          -- 0 = los pedidos no vencen
+alter table public.tenants add column if not exists payment_instructions text not null default '';  -- alias, CBU, QR...
+
+alter table public.orders add column if not exists payment_method        text;         -- transferencia | qr | efectivo | otro
+alter table public.orders add column if not exists payment_reference     text;         -- nº de comprobante / transacción
+alter table public.orders add column if not exists payment_bank          text;         -- banco o billetera emisora
+alter table public.orders add column if not exists payment_datetime      timestamptz;  -- fecha y hora del comprobante
+alter table public.orders add column if not exists payer_name            text;
+alter table public.orders add column if not exists payer_account         text;
+alter table public.orders add column if not exists payment_amount        numeric(14,2);
+alter table public.orders add column if not exists payment_ocr           boolean not null default false;  -- datos leídos por OCR
+alter table public.orders add column if not exists payment_registered_by text;
+alter table public.orders add column if not exists payment_registered_at timestamptz;
+
+alter table public.orders drop constraint if exists orders_status_check;
+update public.orders set status = 'pagado' where status = 'confirmado';   -- nombre anterior (v2.0)
+alter table public.orders add constraint orders_status_check
+  check (status in ('nuevo', 'contactado', 'pagado', 'vencido', 'cancelado'));
+
+-- Un mismo comprobante no puede cerrar dos pedidos de la misma tienda
+create unique index if not exists orders_payment_ref_uniq
+  on public.orders (tenant_id, lower(coalesce(payment_bank, '')), payment_reference)
+  where payment_reference is not null;
+
+drop function if exists public.confirm_order(uuid);
+
+-- register_payment — "Registrar pago": guarda los datos del comprobante,
+-- marca el pedido como pagado y descuenta el stock, todo en una operación.
+create or replace function public.register_payment(p_order uuid, p_payment jsonb)
 returns void language plpgsql security invoker set search_path = public as $$
 declare
   v_tenant uuid;
-  it jsonb;
+  v_status text;
+  v_ref    text := nullif(trim(p_payment ->> 'reference'), '');
+  v_bank   text := nullif(trim(p_payment ->> 'bank'), '');
+  v_method text := coalesce(nullif(trim(p_payment ->> 'method'), ''), 'transferencia');
+  v_dup    text;
+  it       jsonb;
 begin
-  select tenant_id into v_tenant from public.orders where id = p_order;
+  select tenant_id, status into v_tenant, v_status from public.orders where id = p_order;
   if v_tenant is null or not public.is_tenant_admin(v_tenant) then
     raise exception 'Pedido inexistente o sin permiso';
   end if;
-
-  update public.orders set status = 'confirmado'
-   where id = p_order and status in ('nuevo', 'contactado');
-  if not found then
-    raise exception 'El pedido ya fue cerrado o cancelado';
+  if v_status not in ('nuevo', 'contactado', 'vencido') then
+    raise exception 'El pedido ya está %', v_status;
   end if;
+  if v_ref is null and v_method <> 'efectivo' then
+    raise exception 'Falta el número de comprobante';
+  end if;
+  if v_ref is not null then
+    select ref into v_dup from public.orders
+     where tenant_id = v_tenant and id <> p_order and payment_reference = v_ref
+       and lower(coalesce(payment_bank, '')) = lower(coalesce(v_bank, ''))
+     limit 1;
+    if v_dup is not null then
+      raise exception 'Ese comprobante ya se registró en el pedido %', v_dup;
+    end if;
+  end if;
+
+  update public.orders set
+    status                = 'pagado',
+    payment_method        = v_method,
+    payment_reference     = v_ref,
+    payment_bank          = v_bank,
+    payment_datetime      = nullif(p_payment ->> 'datetime', '')::timestamptz,
+    payer_name            = nullif(trim(p_payment ->> 'payer_name'), ''),
+    payer_account         = nullif(trim(p_payment ->> 'payer_account'), ''),
+    payment_amount        = nullif(p_payment ->> 'amount', '')::numeric,
+    payment_ocr           = coalesce((p_payment ->> 'ocr')::boolean, false),
+    payment_registered_by = public.jwt_email(),
+    payment_registered_at = now()
+  where id = p_order;
 
   for it in select * from jsonb_array_elements((select items from public.orders where id = p_order)) loop
     update public.variants
        set stock = greatest(0, stock - (it ->> 'units')::int)
      where tenant_id = v_tenant and id::text = it ->> 'variant_id';
   end loop;
+end;
+$$;
+
+-- expire_orders — marca como "vencido" lo que no se pagó a tiempo.
+-- El backoffice la llama cada vez que abre la lista de pedidos.
+create or replace function public.expire_orders(p_tenant uuid)
+returns int language plpgsql security invoker set search_path = public as $$
+declare
+  n int;
+begin
+  if not public.is_tenant_admin(p_tenant) then
+    raise exception 'Sin permiso';
+  end if;
+  update public.orders o set status = 'vencido'
+    from public.tenants t
+   where t.id = p_tenant and o.tenant_id = t.id
+     and t.order_expiry_hours > 0
+     and o.status in ('nuevo', 'contactado')
+     and o.created_at < now() - make_interval(hours => t.order_expiry_hours);
+  get diagnostics n = row_count;
+  return n;
 end;
 $$;
 

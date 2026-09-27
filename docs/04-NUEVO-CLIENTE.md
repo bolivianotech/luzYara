@@ -15,7 +15,17 @@ Tiempo: ~15 minutos.
 | Formas de venta por mayor | media docena (6) −5 %, docena (12) −10 % |
 | Talles | `S, M, L, XL` |
 
-## 2. Crear la tienda en Supabase
+## 2. Crear la tienda
+
+### Opción A (recomendada) — desde la consola de plataforma
+
+1. Entrá a `https://<tu-sitio>/plataforma.html` con tu correo de superadmin.
+2. **+ Nueva tienda** → nombre, identificador, país y moneda, WhatsApp, venta por mayor, talles y correo del dueño.
+3. **Crear tienda**.
+4. **Supabase → Authentication → Users → Add user → Send invitation** → correo del dueño
+   (la consola todavía no puede enviar invitaciones: eso llega en v3).
+
+### Opción B — por SQL
 
 1. Abrí la plantilla en VS Code:
    ```powershell
@@ -23,8 +33,8 @@ Tiempo: ~15 minutos.
    ```
 2. Reemplazá los valores marcados con 👈 (no guardes los datos del cliente en el repo: copiá, editá en el
    SQL Editor y descartá los cambios del archivo).
-3. **Supabase → SQL Editor → New query** → pegar → **Run**. En *Notices* aparece "Tienda creada: <uuid>".
-4. **Authentication → Users → Add user → Send invitation** → correo del dueño.
+3. **Supabase → SQL Editor → New query** → pegar → **Run**.
+4. Invitá el correo del dueño en **Authentication → Users**.
 
 ## 3. Probar
 
@@ -48,17 +58,7 @@ Vos (admin de plataforma) también podés entrar para ayudarlo en la carga inici
 4. Commit + push (ver [05-VERSIONADO-GIT.md](05-VERSIONADO-GIT.md)).
 5. **Supabase → Authentication → URL Configuration → Redirect URLs** → `https://prendasmichell.com/**`.
 
-## 5. Dar de baja o pausar una tienda
+## 5. Pausar una tienda o cambiar sus administradores
 
-```sql
-update public.tenants set active = false where slug = 'prendasmichell';   -- la tienda deja de verse
-```
-
-## 6. Agregar otro administrador a una tienda
-
-```sql
-insert into public.tenant_admins (tenant_id, email)
-select id, 'otra-persona@gmail.com' from public.tenants where slug = 'prendasmichell';
-```
-
-Y después invitá ese correo en **Authentication → Users**.
+Desde `plataforma.html`: botón **Pausar/Activar** (una tienda pausada deja de verse en internet) y
+**👤 Admins** para agregar o quitar correos. Cada correo nuevo hay que invitarlo en **Authentication → Users**.

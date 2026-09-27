@@ -4,8 +4,9 @@
 |---|---|---|
 | **v1** | ✅ 2026-09-27 | PoC de una tienda (LuzYara): ARS, curva de 5, checkout por WhatsApp. |
 | **v2** | ✅ 2026-09-27 | **Multitenant configurable**: varias tiendas en la misma base; moneda, formas de venta, talles y WhatsApp por tienda; backoffice con inventario y fotos. Las tiendas nuevas se dan de alta por SQL. |
+| **v2.1** | ✅ 2026-09-27 | Cierre del ciclo de venta: registrar pago con datos del comprobante (OCR sin guardar imagen), vencimiento de pedidos, recordatorios; consola de superadmin; aislamiento por tienda también en demo. |
 | **v2.x** | 🔜 | Endurecimiento para operar con clientes reales (ver abajo). |
-| **v3** | 📋 | **Consola de plataforma**: gestionar tiendas sin SQL. |
+| **v3** | 📋 | **Cobro en línea y finanzas**: QR de cobro por tienda, liquidaciones y reportes diarios/semanales/mensuales. |
 | **v4** | 📋 | **SaaS**: registro autoservicio, planes y cobro de suscripción. |
 
 ## v2.x — operar en serio (mejoras incrementales)
@@ -21,10 +22,20 @@
 - [ ] Función en el servidor que recalcule el total del pedido (evita montos manipulados).
 - [ ] Imagen para compartir en redes (Open Graph) por tienda.
 
-## v3 — Consola de plataforma (para nosotros)
+## v3 — Cobro en línea, liquidaciones y reportes
 
-- Página `plataforma.html` solo para `platform_admins`:
-  alta/pausa de tiendas, invitación de administradores, métricas por tienda (pedidos, ventas cerradas).
+- **QR de cobro en línea por tienda**: cada tienda conecta su medio (Mercado Pago en AR; QR interoperable / pasarela
+  bancaria en BO). El pago confirmado por la pasarela (webhook) registra el pago solo, sin comprobante manual.
+- **Liquidaciones**: qué se cobró por tienda, comisiones de la plataforma y del medio de pago, qué se le transfiere
+  al comercio y cuándo; estados *pendiente / liquidado*.
+- **Reportes** diarios, semanales y mensuales: ventas, unidades por producto/talle/categoría, ticket promedio,
+  pedidos vencidos vs. pagados, tiempo hasta el pago. Exportables a Excel/CSV.
+- Base ya lista en v2.1: cada pedido pagado guarda fecha, medio, banco, referencia y monto.
+
+## Consola de plataforma — lo que falta (v3)
+
+Ya existe `plataforma.html` (v2.1: alta de tiendas, admins, pausar, métricas del mes). Falta:
+
 - Colores de marca por tienda (hoy es rosa/naranja fijo) y logo propio.
 - Subdominios automáticos: `luzyara.<nuestro-dominio>` (dominio comodín en Cloudflare).
 - Edge Function de Supabase para invitar usuarios desde la consola (requiere `service_role`, del lado del servidor).

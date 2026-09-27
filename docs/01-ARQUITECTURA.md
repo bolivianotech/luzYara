@@ -6,6 +6,7 @@
                  ┌──────────────────────── Hosting estático (Cloudflare Pages / Netlify) ───────┐
  Cliente final ─►│ index.html  (tienda)                                                          │
  Dueño tienda ──►│ admin.html  (backoffice)          js/config.js → qué Supabase y qué dominios  │
+ Superadmin ────►│ plataforma.html (todas las tiendas)                                            │
                  └───────────────┬───────────────────────────────────────────────────────────────┘
                                  │ supabase-js (clave anon, pública)
                  ┌───────────────▼───────────── Supabase ─────────────────────────────────────────┐
@@ -36,7 +37,7 @@ más opcionalmente un dominio.
 ```
 tenants ──< categories ──< products ──< variants (talle + stock)
    │                                         ▲
-   ├──< orders (items: variant_id, units...) ┘  (venta cerrada descuenta stock)
+   ├──< orders (items: variant_id, units... + datos del pago) ┘  (registrar pago descuenta stock)
    └──< tenant_admins (email)          platform_admins (email)  ← nosotros
 ```
 
@@ -46,7 +47,7 @@ tenants ──< categories ──< products ──< variants (talle + stock)
 | `categories` | `tenant_id` | nombre, emoji, orden, visible |
 | `products` | `tenant_id` | precio **por unidad**, foto, visible |
 | `variants` | `(product_id, size)` único | stock por talle |
-| `orders` | `(tenant_id, ref)` único | snapshot de ítems y totales; estado `nuevo → contactado → confirmado / cancelado` |
+| `orders` | `(tenant_id, ref)` único | snapshot de ítems y totales + datos del comprobante; estados abajo |
 
 ### Formas de venta por mayor (`tenants.packs`)
 
@@ -55,6 +56,26 @@ tenants ──< categories ──< products ──< variants (talle + stock)
 [{ "key": "media-docena", "label": "Media docena", "plural": "Medias docenas", "units": 6, "discount_pct": 5 },
  { "key": "docena", "label": "Docena", "plural": "Docenas", "units": 12, "discount_pct": 10 }]
 ```
+
+## Ciclo de un pedido
+
+```
+Cliente: "Enviar pedido por WhatsApp"
+   │
+ nuevo ──(💬 Contactar)──► contactado ──(💰 Registrar pago)──► pagado   (baja el stock)
+   │                          │
+   └──── sin pago en N horas ─┴──► vencido ──(💰 Registrar pago)──► pagado
+   └──── (Cancelar) ──────────────► cancelado
+```
+
+- **Registrar pago** guarda: medio, fecha y hora, nº de comprobante, banco emisor, nombre y cuenta de quien pagó y monto.
+  Función `register_payment()`: valida permisos, exige comprobante (salvo efectivo), rechaza un comprobante ya usado
+  en la misma tienda y descuenta stock en la misma transacción.
+- **OCR** (`js/ocr.js`): Tesseract.js lee la imagen en el navegador (modo PSM 4, columna de tamaños variables) y
+  `Ocr.parse()` extrae los datos con reglas para bancos y billeteras de Argentina y Bolivia. **La imagen nunca se
+  sube**; el administrador revisa y confirma.
+- **Vencimiento**: `expire_orders()` corre cada vez que el backoffice abre los pedidos (`tenants.order_expiry_hours`).
+  El stock solo se descuenta al pagar, así que un pedido vencido no retiene prendas.
 
 ## Motor de precios (`Pricing` en `js/core.js`)
 
@@ -84,7 +105,8 @@ Misma interfaz con dos implementaciones:
 | Admin de plataforma (`platform_admins`) | todo sobre todas las tiendas; crear/borrar tiendas |
 
 - El login usa `shouldCreateUser: false`: solo entran usuarios invitados desde Supabase.
-- "Venta cerrada" usa la función `confirm_order` (una transacción: cambia estado + descuenta stock).
+- "Registrar pago" usa la función `register_payment` (una transacción: datos del pago + estado + stock).
+- Crear tiendas y asignar administradores: solo `platform_admins` (consola `plataforma.html`).
 - Los montos del pedido los calcula el navegador → son **referencia**; el precio final se confirma por WhatsApp.
 - Las fotos se suben a `product-images/<tenant_id>/...`; la política de Storage verifica que el usuario administre
   ese `tenant_id`.

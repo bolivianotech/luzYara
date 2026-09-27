@@ -9,7 +9,8 @@ const A = {
   products: [],
   orders: [],
   invCategory: 'all',
-  orderFilter: 'nuevo',
+  orderFilter: 'pendiente',
+  paying: null,        // pedido cuyo pago se está registrando
   form: null,          // producto en edición: { id, isNew, file, imageUrl, oldImageUrl }
   quickProductId: null,
   pendingStock: {}     // variantId → stock que se está guardando
@@ -54,13 +55,23 @@ async function checkAccess() {
     $('denied-email').textContent = session.email;
     return;
   }
-  $('admin-user').textContent = Data.isDemo ? 'modo demo' : session.email;
+  $('admin-user').textContent = session.email + (Data.isDemo ? ' (demo)' : '');
   enterAdmin();
 }
 
 function showLogin() {
   $('admin-view').style.display = 'none';
   $('login-view').style.display = 'block';
+  if (Data.isDemo) {
+    // En demo el login es inmediato: se muestran las cuentas de prueba
+    $('demo-accounts').style.display = 'block';
+    $('demo-accounts-list').innerHTML = [
+      ...Object.values(window.DEMO_TENANTS || {}).map(d => [d.admins?.[0], `dueña de ${d.tenant.name}`]),
+      [(window.DEMO_PLATFORM_ADMINS || [])[0], 'superadmin (todas las tiendas)']
+    ].filter(([e]) => e).map(([email, who]) =>
+      `<button class="btn btn-soft w-full" style="font-size:13px; margin-bottom:6px; text-align:left;" onclick="$('login-email').value='${email}'; sendLoginLink()">
+        ${esc(email)} <span class="hint" style="margin:0;">· ${esc(who)}</span></button>`).join('');
+  }
 }
 
 async function sendLoginLink() {
@@ -68,6 +79,7 @@ async function sendLoginLink() {
   if (!email) return showToast('Escribí tu correo', 'warn');
   try {
     await Data.signIn(email);
+    if (Data.isDemo) return location.reload();
     $('login-status').textContent = '✅ Listo: revisá tu correo y abrí el enlace desde este mismo navegador.';
     $('login-status').style.color = 'var(--green)';
   } catch(e) {
@@ -90,14 +102,10 @@ async function enterAdmin() {
   $('store-link').href = tenantLink('index.html', A.tenant.slug);
   if (Data.isDemo) {
     $('demo-banner').style.display = 'block';
-    $('logout-btn').style.display = 'none';
     $('reset-demo-btn').style.display = 'inline-block';
-    const sw = $('demo-switch');
-    sw.style.display = 'inline-flex';
-    sw.innerHTML = `<select class="field" style="padding:8px 12px;" onchange="location.href='admin.html?tienda='+this.value" aria-label="Tienda demo">
-      ${Object.values(window.DEMO_TENANTS || {}).map(d => `<option value="${d.tenant.slug}" ${d.tenant.slug === A.tenant.slug ? 'selected' : ''}>${esc(d.tenant.name)}</option>`).join('')}
-    </select>`;
   }
+  // Solo el superadmin ve el acceso a la consola de todas las tiendas
+  if (await Data.isPlatformAdmin()) $('platform-link').style.display = 'inline-block';
   document.querySelectorAll('#admin-tabs .pill-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   await Promise.all([loadCatalog(), loadOrders()]);
   fillConfigForm();
@@ -157,7 +165,7 @@ function renderKpis() {
   $('kpi-units').textContent = variants.reduce((s, v) => s + v.stock, 0).toLocaleString(A.tenant.locale);
   $('kpi-out').textContent = variants.filter(v => v.stock <= 0).length;
   $('kpi-low').textContent = variants.filter(v => v.stock > 0 && v.stock <= A.tenant.low_stock_threshold).length;
-  $('kpi-orders').textContent = A.orders.filter(o => o.status === 'nuevo').length;
+  $('kpi-orders').textContent = A.orders.filter(o => o.status === 'nuevo' || o.status === 'contactado').length;
 }
 
 // ------------------------------------------------------------
@@ -553,12 +561,16 @@ async function deleteCategoryRow(id) {
 const ORDER_STATUS = {
   nuevo:      { label: '🆕 Nuevo',       bg: '#e8f0fd', fg: '#004a9f' },
   contactado: { label: '💬 Contactado',  bg: '#fff8e8', fg: '#7a4f00' },
-  confirmado: { label: '✓ Venta cerrada', bg: '#e8f8f0', fg: '#1a7f3a' },
+  pagado:     { label: '✓ Pagado',       bg: '#e8f8f0', fg: '#1a7f3a' },
+  vencido:    { label: '⌛ Vencido',      bg: '#fff0f0', fg: '#c62828' },
   cancelado:  { label: '✕ Cancelado',    bg: '#f5f5f7', fg: '#999' }
 };
+const PAYMENT_METHODS = { transferencia: 'Transferencia', qr: 'QR', efectivo: 'Efectivo', otro: 'Otro' };
+const isPending = o => o.status === 'nuevo' || o.status === 'contactado';
 
 async function loadOrders() {
   try {
+    await Data.expireOrders(A.tenant);   // lo que no se pagó a tiempo pasa a "vencido"
     A.orders = await Data.listOrders(A.tenant);
   } catch(e) {
     console.error(e);
@@ -568,19 +580,32 @@ async function loadOrders() {
   renderKpis();
 }
 
+function paymentSummary(o) {
+  if (o.status !== 'pagado') return '';
+  const dt = o.payment_datetime ? new Date(o.payment_datetime).toLocaleString(A.tenant.locale, { dateStyle: 'short', timeStyle: 'short' }) : '';
+  return `<div style="margin-top:6px; padding:6px 8px; background:#f2fbf5; border-radius:8px; font-size:11px; line-height:1.5;">
+    💰 <b>${esc(PAYMENT_METHODS[o.payment_method] || o.payment_method || '')}</b>${o.payment_bank ? ` · ${esc(o.payment_bank)}` : ''}
+    ${o.payment_reference ? `<br>Comp. <b>${esc(o.payment_reference)}</b>` : ''}${dt ? ` · ${dt}` : ''}
+    ${o.payer_name ? `<br>${esc(o.payer_name)}` : ''}${o.payer_account ? ` · Cta. ${esc(o.payer_account)}` : ''}
+    ${o.payment_amount != null && Number(o.payment_amount) !== Number(o.total) ? `<br><span style="color:#c62828;">Pagó ${afmt(o.payment_amount)} (pedido ${afmt(o.total)})</span>` : ''}
+  </div>`;
+}
+
 function renderOrders() {
-  const counts = s => A.orders.filter(o => s === 'all' || o.status === s).length;
-  $('orders-filter').innerHTML = [['nuevo', 'Nuevos'], ['contactado', 'Contactados'], ['confirmado', 'Cerrados'], ['cancelado', 'Cancelados'], ['all', 'Todos']]
+  const counts = s => A.orders.filter(o => s === 'all' || (s === 'pendiente' ? isPending(o) : o.status === s)).length;
+  $('orders-filter').innerHTML = [['pendiente', 'Pendientes de pago'], ['pagado', 'Pagados'], ['vencido', 'Vencidos'], ['cancelado', 'Cancelados'], ['all', 'Todos']]
     .map(([k, l]) => `<button class="pill-tab ${A.orderFilter === k ? 'active' : ''}" onclick="A.orderFilter='${k}'; renderOrders()">${l} (${counts(k)})</button>`).join('');
 
-  const list = A.orders.filter(o => A.orderFilter === 'all' || o.status === A.orderFilter);
+  const list = A.orders.filter(o => A.orderFilter === 'all' || (A.orderFilter === 'pendiente' ? isPending(o) : o.status === A.orderFilter));
   const btn = 'font-size:12px; padding:5px 10px; margin:2px;';
+  const hours = Number(A.tenant.order_expiry_hours) || 0;
   $('orders-table').innerHTML = `
     <thead><tr><th>Pedido</th><th>Cliente</th><th>Detalle</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
     <tbody>${list.map(o => {
       const st = ORDER_STATUS[o.status] || { label: esc(o.status), bg: '#f0f0f5', fg: '#666' };
-      const open = o.status === 'nuevo' || o.status === 'contactado';
+      const payable = isPending(o) || o.status === 'vencido';
       const detail = (o.items || []).map(i => `${Pricing.describe(i.mode, i.qty, i.units, i.pack)} ${esc(i.name)} · ${esc(i.size)}`).join('<br>');
+      const expires = isPending(o) && hours ? new Date(new Date(o.created_at).getTime() + hours * 3600e3) : null;
       return `<tr>
         <td style="font-size:11px; font-family:monospace; font-weight:700;">${esc(o.ref)}</td>
         <td style="font-size:13px; font-weight:700; min-width:150px;">${esc(o.customer_name)}
@@ -588,35 +613,152 @@ function renderOrders() {
           <div class="hint" style="margin:0;">${esc(o.customer_location)} · ${esc(o.delivery_method)}</div></td>
         <td style="font-size:12px; font-weight:600; min-width:200px;">${detail}${o.notes ? `<div class="hint">📝 ${esc(o.notes)}</div>` : ''}</td>
         <td style="font-weight:800; white-space:nowrap;">${afmt(o.total)}${Number(o.discount) ? `<div style="font-size:11px; color:#d6335a;">−${afmt(o.discount)} mayorista</div>` : ''}</td>
-        <td><span style="background:${st.bg}; color:${st.fg}; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; white-space:nowrap;">${st.label}</span></td>
+        <td style="min-width:150px;"><span style="background:${st.bg}; color:${st.fg}; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; white-space:nowrap;">${st.label}</span>
+          ${expires ? `<div class="hint" style="margin-top:4px;">Vence ${expires.toLocaleString(A.tenant.locale, { dateStyle: 'short', timeStyle: 'short' })}</div>` : ''}
+          ${paymentSummary(o)}</td>
         <td style="font-size:12px; color:var(--text-sec); white-space:nowrap;">${new Date(o.created_at).toLocaleString(A.tenant.locale, { dateStyle: 'short', timeStyle: 'short' })}</td>
-        <td style="min-width:170px;">
+        <td style="min-width:180px;">
+          ${payable ? `<button class="btn" style="${btn} background:#e8f8f0; color:#1a7f3a;" onclick="openPaymentForm('${o.id}')">💰 Registrar pago</button>` : ''}
           <button class="btn btn-wa" style="${btn}" onclick="contactCustomer('${o.id}')">💬 Contactar</button>
-          ${o.status === 'nuevo' ? `<button class="btn" style="${btn} background:#fff8e8; color:#7a4f00;" onclick="setOrderStatus('${o.id}', 'contactado')">Contactado</button>` : ''}
-          ${open ? `<button class="btn" style="${btn} background:#e8f8f0; color:#1a7f3a;" onclick="confirmClick(this, () => setOrderStatus('${o.id}', 'confirmado'))">✓ Venta cerrada</button>
-                    <button class="btn btn-soft" style="${btn}" onclick="confirmClick(this, () => setOrderStatus('${o.id}', 'cancelado'))">Cancelar</button>` : ''}
+          ${payable ? `<button class="btn" style="${btn} background:#fff8e8; color:#7a4f00;" onclick="remindPayment('${o.id}')">🔔 Recordar pago</button>` : ''}
+          ${o.status === 'nuevo' ? `<button class="btn btn-soft" style="${btn}" onclick="setOrderStatus('${o.id}', 'contactado')">Contactado</button>` : ''}
+          ${payable ? `<button class="btn btn-soft" style="${btn}" onclick="confirmClick(this, () => setOrderStatus('${o.id}', 'cancelado'))">Cancelar</button>` : ''}
         </td>
       </tr>`;
     }).join('') || '<tr><td colspan="7" style="text-align:center; padding:40px; color:#999;">Sin pedidos en este estado</td></tr>'}</tbody>`;
+}
+
+function paymentInfoText() {
+  const info = (A.tenant.payment_instructions || '').trim();
+  return info ? `\n\nDatos para el pago:\n${info}` : '';
 }
 
 function contactCustomer(id) {
   const o = A.orders.find(x => sameId(x.id, id));
   if (!o) return;
   const text = `¡Hola ${o.customer_name.split(' ')[0]}! Te escribimos de ${A.tenant.name} por tu pedido ${o.ref} de ${afmt(o.total)}. ` +
-    'Te confirmamos disponibilidad y te pasamos los datos para el pago y el envío.';
+    'Te confirmamos disponibilidad.' + paymentInfoText() + '\n\nCuando pagues, envianos el comprobante por acá. ¡Gracias!';
+  window.open(whatsappUrl(o.customer_phone, text), '_blank');
+  if (o.status === 'nuevo') setOrderStatus(o.id, 'contactado', { silent: true });
+}
+
+function remindPayment(id) {
+  const o = A.orders.find(x => sameId(x.id, id));
+  if (!o) return;
+  const text = `¡Hola ${o.customer_name.split(' ')[0]}! Te recordamos tu pedido ${o.ref} de ${afmt(o.total)} en ${A.tenant.name}. ` +
+    '¿Pudiste hacer el pago? Si ya lo hiciste, envianos el comprobante por acá.' + paymentInfoText();
   window.open(whatsappUrl(o.customer_phone, text), '_blank');
 }
 
-// "confirmado" = venta cerrada: descuenta el stock de cada talle del pedido
-async function setOrderStatus(id, status) {
+async function setOrderStatus(id, status, { silent = false } = {}) {
   try {
     await Data.setOrderStatus(A.tenant, id, status);
-    showToast(status === 'confirmado' ? 'Venta cerrada ✓ Stock actualizado' : `Pedido: ${ORDER_STATUS[status].label}`, 'success');
+    if (!silent) showToast(`Pedido: ${ORDER_STATUS[status].label}`, 'success');
     await loadOrders();
-    if (status === 'confirmado') await loadCatalog();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ------------------------------------------------------------
+// REGISTRAR PAGO — cierra el ciclo de la venta con los datos del comprobante.
+// La foto del comprobante se lee con OCR en este navegador y se descarta:
+// solo se guardan los datos que el administrador confirma.
+// ------------------------------------------------------------
+function toLocalInput(date) {
+  const d = new Date(date);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function openPaymentForm(id) {
+  const o = A.orders.find(x => sameId(x.id, id));
+  if (!o) return;
+  A.paying = { id: o.id, ocr: false };
+  $('pay-title').textContent = `Registrar pago · ${o.ref}`;
+  $('pay-summary').innerHTML = `<b>${esc(o.customer_name)}</b> · ${o.units} prendas · Total del pedido <b>${afmt(o.total)}</b>`;
+  $('pay-method').value = 'transferencia';
+  $('pay-datetime').value = toLocalInput(Date.now());
+  $('pay-amount').value = o.total;
+  ['pay-reference', 'pay-bank', 'pay-payer', 'pay-account'].forEach(f => { $(f).value = ''; $(f).classList.remove('ocr-hit'); });
+  $('pay-ocr-status').textContent = '';
+  $('pay-ocr-raw').style.display = 'none';
+  $('pay-ocr-text').textContent = '';
+  onPaymentMethodChange();
+  checkPaymentAmount();
+  showModal('payment-modal');
+}
+
+function onPaymentMethodChange() {
+  const cash = $('pay-method').value === 'efectivo';
+  $('pay-reference-label').textContent = cash ? 'Nº de recibo (opcional)' : 'Nº de comprobante / transacción *';
+}
+
+function checkPaymentAmount() {
+  const o = A.orders.find(x => sameId(x.id, A.paying?.id));
+  const amount = parseFloat($('pay-amount').value);
+  $('pay-amount-warn').textContent = o && amount > 0 && Math.abs(amount - Number(o.total)) > 0.009
+    ? `⚠️ El monto no coincide con el pedido (${afmt(o.total)}). Diferencia: ${afmt(amount - Number(o.total))}`
+    : '';
+}
+
+async function readReceipt(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  const status = $('pay-ocr-status');
+  status.style.color = 'var(--text-sec)';
+  status.textContent = 'Preparando el lector (la primera vez tarda unos segundos)…';
+  try {
+    const text = await Ocr.read(file, p => { status.textContent = `Leyendo el comprobante… ${Math.round(p * 100)}%`; });
+    const found = Ocr.parse(text);
+    const fields = { datetime: 'pay-datetime', reference: 'pay-reference', bank: 'pay-bank', payer_name: 'pay-payer', payer_account: 'pay-account', amount: 'pay-amount' };
+    let hits = 0;
+    for (const [k, id] of Object.entries(fields)) {
+      $(id).classList.remove('ocr-hit');
+      if (found[k] != null && found[k] !== '') { $(id).value = found[k]; $(id).classList.add('ocr-hit'); hits++; }
+    }
+    A.paying.ocr = hits > 0;
+    $('pay-ocr-text').textContent = text.trim() || '(sin texto)';
+    $('pay-ocr-raw').style.display = 'block';
+    status.style.color = hits ? '#1a7f3a' : '#c62828';
+    status.textContent = hits
+      ? `✓ Se completaron ${hits} de 6 datos (resaltados en verde). Revisalos y corregí lo que haga falta.`
+      : 'No se pudieron detectar datos. Probá con una captura más nítida o completalos a mano.';
+    checkPaymentAmount();
+  } catch(e) {
+    console.error(e);
+    status.style.color = '#c62828';
+    status.textContent = '❌ ' + e.message;
+  }
+}
+
+async function savePayment() {
+  const method = $('pay-method').value;
+  const local = $('pay-datetime').value;
+  const payment = {
+    method,
+    reference: val('pay-reference'),
+    bank: val('pay-bank'),
+    datetime: local ? new Date(local).toISOString() : '',
+    payer_name: val('pay-payer'),
+    payer_account: val('pay-account'),
+    amount: $('pay-amount').value,
+    ocr: !!A.paying.ocr
+  };
+  if (!payment.reference && method !== 'efectivo') return showToast('Falta el número de comprobante', 'warn');
+  if (!local) return showToast('Falta la fecha y hora del pago', 'warn');
+  if (!(parseFloat(payment.amount) > 0)) return showToast('Falta el monto pagado', 'warn');
+  const btn = $('pay-save');
+  btn.disabled = true;
+  try {
+    await Data.registerPayment(A.tenant, A.paying.id, payment);
+    closeModal('payment-modal');
+    showToast('Pago registrado ✓ Venta cerrada y stock actualizado', 'success');
+    await Promise.all([loadOrders(), loadCatalog()]);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -638,6 +780,8 @@ function fillConfigForm() {
   previewCurrency();
   $('cfg-sizes').value = (t.sizes || []).join(', ');
   $('cfg-low').value = t.low_stock_threshold;
+  $('cfg-expiry').value = t.order_expiry_hours ?? 48;
+  $('cfg-payinfo').value = t.payment_instructions || '';
   renderPackRows(t.packs || []);
 }
 
@@ -726,7 +870,9 @@ async function saveConfig() {
       ...currency,
       sizes,
       packs: readPacks(),
-      low_stock_threshold: Math.max(0, parseInt(val('cfg-low'), 10) || 0)
+      low_stock_threshold: Math.max(0, parseInt(val('cfg-low'), 10) || 0),
+      order_expiry_hours: Math.max(0, parseInt(val('cfg-expiry'), 10) || 0),
+      payment_instructions: $('cfg-payinfo').value.trim()
     };
   } catch(e) {
     return showToast(e.message, 'warn');

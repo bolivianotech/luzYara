@@ -50,10 +50,21 @@ const DemoBackend = {
     this._save(db);
   },
 
-  async session() { return { email: 'demo@local' }; },
-  async signIn() {},
-  async signOut() {},
-  async canManage() { return true; },
+  // Login simulado: en demo no hay correo ni contraseña, pero sí se respeta
+  // qué tienda administra cada cuenta (igual que las políticas RLS en producción).
+  async session() {
+    const email = store.get('demo_user', null);
+    return email ? { email } : null;
+  },
+  async signIn(email) { store.set('demo_user', String(email).trim().toLowerCase()); },
+  async signOut() { store.remove('demo_user'); },
+  async isPlatformAdmin() {
+    return (window.DEMO_PLATFORM_ADMINS || []).includes(store.get('demo_user', ''));
+  },
+  async canManage(tenant) {
+    if (await this.isPlatformAdmin()) return true;
+    return (this._db(tenant.slug)?.admins || []).includes(store.get('demo_user', ''));
+  },
 
   async updateTenant(tenant, patch) {
     const db = this._db(tenant.slug);
@@ -123,21 +134,95 @@ const DemoBackend = {
     const db = this._db(tenant.slug);
     const o = db.orders.find(x => sameId(x.id, orderId));
     if (!o) throw new Error('Pedido no encontrado');
-    if (status === 'confirmado') {
-      if (!['nuevo', 'contactado'].includes(o.status)) throw new Error('El pedido ya fue cerrado o cancelado');
-      for (const it of o.items) {
-        for (const p of db.products) {
-          const v = p.variants.find(x => sameId(x.id, it.variant_id));
-          if (v) v.stock = Math.max(0, v.stock - it.units);
-        }
-      }
-    }
     o.status = status;
     this._save(db);
   },
 
+  // Mismas reglas que register_payment() en supabase/schema.sql
+  async registerPayment(tenant, orderId, pay) {
+    const db = this._db(tenant.slug);
+    const o = db.orders.find(x => sameId(x.id, orderId));
+    if (!o) throw new Error('Pedido no encontrado');
+    if (!['nuevo', 'contactado', 'vencido'].includes(o.status)) throw new Error(`El pedido ya está ${o.status}`);
+    const ref = (pay.reference || '').trim() || null;
+    const bank = (pay.bank || '').trim() || null;
+    if (!ref && pay.method !== 'efectivo') throw new Error('Falta el número de comprobante');
+    if (ref) {
+      const dup = db.orders.find(x => x.id !== o.id && x.payment_reference === ref &&
+        (x.payment_bank || '').toLowerCase() === (bank || '').toLowerCase());
+      if (dup) throw new Error(`Ese comprobante ya se registró en el pedido ${dup.ref}`);
+    }
+    Object.assign(o, {
+      status: 'pagado', payment_method: pay.method || 'transferencia', payment_reference: ref, payment_bank: bank,
+      payment_datetime: pay.datetime || null, payer_name: pay.payer_name || null, payer_account: pay.payer_account || null,
+      payment_amount: pay.amount === '' || pay.amount == null ? null : Number(pay.amount), payment_ocr: !!pay.ocr,
+      payment_registered_by: store.get('demo_user', ''), payment_registered_at: new Date().toISOString()
+    });
+    for (const it of o.items) {
+      for (const p of db.products) {
+        const v = p.variants.find(x => sameId(x.id, it.variant_id));
+        if (v) v.stock = Math.max(0, v.stock - it.units);
+      }
+    }
+    this._save(db);
+  },
+
+  async expireOrders(tenant) {
+    const db = this._db(tenant.slug);
+    const hours = Number(db.tenant.order_expiry_hours) || 0;
+    if (!hours) return 0;
+    const limit = Date.now() - hours * 3600e3;
+    let n = 0;
+    for (const o of db.orders) {
+      if (['nuevo', 'contactado'].includes(o.status) && new Date(o.created_at).getTime() < limit) { o.status = 'vencido'; n++; }
+    }
+    if (n) this._save(db);
+    return n;
+  },
+
+  // ---------- Plataforma (superadmin) ----------
+  _slugs() {
+    return [...new Set([...Object.keys(window.DEMO_TENANTS || {}), ...store.get('demo_tenant_slugs', [])])];
+  },
+  async listTenants() {
+    return this._slugs().map(s => this._db(s)?.tenant).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+  },
+  async createTenant(tenant, admins) {
+    if (this._slugs().includes(tenant.slug)) throw new Error(`Ya existe una tienda "${tenant.slug}"`);
+    const db = {
+      tenant: { ...tenant, id: 'demo-' + tenant.slug, active: true },
+      admins: admins.map(a => a.toLowerCase()),
+      categories: [{ id: newUuid(), name: 'General', emoji: '🏷️', sort: 1, active: true }],
+      products: [], orders: []
+    };
+    this._save(db);
+    store.set('demo_tenant_slugs', [...store.get('demo_tenant_slugs', []), tenant.slug]);
+    return db.tenant;
+  },
+  async listTenantAdmins(tenant) { return [...(this._db(tenant.slug).admins || [])]; },
+  async addTenantAdmin(tenant, email) {
+    const db = this._db(tenant.slug);
+    db.admins = [...new Set([...(db.admins || []), email.toLowerCase()])];
+    this._save(db);
+  },
+  async removeTenantAdmin(tenant, email) {
+    const db = this._db(tenant.slug);
+    db.admins = (db.admins || []).filter(a => a !== email);
+    this._save(db);
+  },
+  async platformOrders() {
+    return this._slugs().flatMap(s => (this._db(s)?.orders || []).map(o => ({ ...o, tenant_id: this._db(s).tenant.id })));
+  },
+  async platformProducts() {
+    return this._slugs().flatMap(s => (this._db(s)?.products || []).map(p => ({ ...p, tenant_id: this._db(s).tenant.id })));
+  },
+
   reset(slug) {
     store.remove(this._key(slug));
+  },
+  resetAll() {
+    this._slugs().forEach(s => store.remove(this._key(s)));
+    ['demo_tenant_slugs', 'demo_user'].forEach(k => store.remove(k));
   }
 };
 
@@ -188,6 +273,9 @@ const SupabaseBackend = {
   async signOut() { await this.sb.auth.signOut(); },
   async canManage(tenant) {
     return !!this._check(await this.sb.rpc('is_tenant_admin', { p_tenant: tenant.id }));
+  },
+  async isPlatformAdmin() {
+    return !!this._check(await this.sb.rpc('is_platform_admin'));
   },
   onAuthChange(cb) { this.sb.auth.onAuthStateChange((_e, s) => cb(s)); },
 
@@ -252,9 +340,45 @@ const SupabaseBackend = {
   },
 
   async setOrderStatus(tenant, orderId, status) {
-    this._check(status === 'confirmado'
-      ? await this.sb.rpc('confirm_order', { p_order: orderId })
-      : await this.sb.from('orders').update({ status }).eq('id', orderId));
+    this._check(await this.sb.from('orders').update({ status }).eq('id', orderId));
+  },
+
+  async registerPayment(tenant, orderId, payment) {
+    this._check(await this.sb.rpc('register_payment', { p_order: orderId, p_payment: payment }));
+  },
+
+  async expireOrders(tenant) {
+    return this._check(await this.sb.rpc('expire_orders', { p_tenant: tenant.id }));
+  },
+
+  // ---------- Plataforma (superadmin): las políticas RLS solo lo permiten a platform_admins ----------
+  async listTenants() {
+    return this._check(await this.sb.from('tenants').select('*').order('name'));
+  },
+  async createTenant(tenant, admins) {
+    const row = this._check(await this.sb.from('tenants').insert(tenant).select().single());
+    if (admins.length) {
+      this._check(await this.sb.from('tenant_admins').insert(admins.map(email => ({ tenant_id: row.id, email: email.toLowerCase() }))));
+    }
+    this._check(await this.sb.from('categories').insert({ tenant_id: row.id, name: 'General', emoji: '🏷️', sort: 1 }));
+    return row;
+  },
+  async listTenantAdmins(tenant) {
+    return this._check(await this.sb.from('tenant_admins').select('email').eq('tenant_id', tenant.id)).map(r => r.email);
+  },
+  async addTenantAdmin(tenant, email) {
+    this._check(await this.sb.from('tenant_admins').insert({ tenant_id: tenant.id, email: email.toLowerCase() }));
+  },
+  async removeTenantAdmin(tenant, email) {
+    this._check(await this.sb.from('tenant_admins').delete().eq('tenant_id', tenant.id).eq('email', email));
+  },
+  async platformOrders() {
+    const since = new Date(Date.now() - 62 * 864e5).toISOString();   // últimos 2 meses
+    return this._check(await this.sb.from('orders')
+      .select('tenant_id,status,total,payment_amount,payment_registered_at,created_at').gte('created_at', since).limit(5000));
+  },
+  async platformProducts() {
+    return this._check(await this.sb.from('products').select('tenant_id,active,variants(stock)'));
   }
 };
 
