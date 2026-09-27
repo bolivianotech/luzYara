@@ -20,8 +20,30 @@ const DemoBackend = {
       db = JSON.parse(JSON.stringify(seed));
       db.orders = [];
       this._save(db);
+    } else {
+      this._syncSeed(db, slug);
     }
     return db;
+  },
+  // La copia guardada en el navegador no se entera de los productos que se agregan
+  // después a demo-data.js: se suman acá, sin tocar lo que el usuario ya cambió
+  // (y sin resucitar lo que borró a propósito).
+  _syncSeed(db, slug) {
+    const seed = window.DEMO_TENANTS?.[slug];
+    if (!seed) return;
+    const deleted = new Set(db.deletedSeed || []);
+    let changed = false;
+    for (const key of ['categories', 'products']) {
+      for (const item of seed[key] || []) {
+        if (deleted.has(item.id) || db[key].some(x => sameId(x.id, item.id))) continue;
+        db[key].push(JSON.parse(JSON.stringify(item)));
+        changed = true;
+      }
+    }
+    if (changed) this._save(db);
+  },
+  _markDeleted(db, id) {
+    db.deletedSeed = [...new Set([...(db.deletedSeed || []), id])];
   },
   _save(db) {
     if (!store.set(this._key(db.tenant.slug), db)) {
@@ -86,6 +108,7 @@ const DemoBackend = {
     const db = this._db(tenant.slug);
     if (db.products.some(p => sameId(p.category_id, id))) throw new Error('La categoría tiene productos: movelos o desactivala');
     db.categories = db.categories.filter(c => !sameId(c.id, id));
+    this._markDeleted(db, id);
     this._save(db);
   },
 
@@ -108,6 +131,7 @@ const DemoBackend = {
   async deleteProduct(tenant, id) {
     const db = this._db(tenant.slug);
     db.products = db.products.filter(p => !sameId(p.id, id));
+    this._markDeleted(db, id);
     this._save(db);
   },
 
