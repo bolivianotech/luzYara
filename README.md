@@ -6,7 +6,7 @@ catálogo, moneda, formas de venta, número de WhatsApp y administradores.
 
 | | |
 |---|---|
-| **Versión actual** | `v2.1.0` — ver [CHANGELOG.md](CHANGELOG.md) |
+| **Versión actual** | `v2.1.1` — ver [CHANGELOG.md](CHANGELOG.md) |
 | **Primera tienda** | LuzYara (Argentina · ARS · curva de 5) |
 | **Stack** | HTML + JavaScript sin compilación · Supabase (Postgres, Auth, Storage) · hosting estático |
 | **Costo base** | $0 (planes gratuitos de Supabase y Cloudflare Pages / Netlify) |

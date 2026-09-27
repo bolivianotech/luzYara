@@ -32,7 +32,9 @@ window.DEMO_TENANTS = {
       { id: 'c-osa', name: 'Osa Rosa', emoji: '🩷', sort: 1, active: true },
       { id: 'c-oso', name: 'Oso Café', emoji: '🤎', sort: 2, active: true },
       { id: 'c-monstruo', name: 'Monstruo Rojo', emoji: '❤️', sort: 3, active: true },
-      { id: 'c-pikachu', name: 'Pikachu', emoji: '💛', sort: 4, active: true }
+      { id: 'c-pikachu', name: 'Pikachu', emoji: '💛', sort: 4, active: true },
+      { id: 'c-jirafa', name: 'Jirafa', emoji: '🦒', sort: 5, active: true },
+      { id: 'c-dino', name: 'Dinosaurio', emoji: '🦖', sort: 6, active: true }
     ],
     products: [
       { id: 'p-osa', category_id: 'c-osa', name: 'Pijama Osa Rosa', price: 32000, sort: 1, active: true,
@@ -50,7 +52,15 @@ window.DEMO_TENANTS = {
       { id: 'p-pikachu', category_id: 'c-pikachu', name: 'Pijama Pikachu', price: 36500, sort: 4, active: true,
         description: 'Pijama Pikachu amarillo eléctrico. Orejas puntiagudas.',
         image_url: 'assets/demo/luzyara/pikachu.jpg',
-        variants: [{ id: 'v-pik-s', size: 'S', stock: 7 }, { id: 'v-pik-m', size: 'M', stock: 3 }] }
+        variants: [{ id: 'v-pik-s', size: 'S', stock: 7 }, { id: 'v-pik-m', size: 'M', stock: 3 }] },
+      { id: 'p-jirafa', category_id: 'c-jirafa', name: 'Pijama Jirafa', price: 34500, sort: 5, active: true,
+        description: 'Pijama enterizo de polar con capucha de jirafa, orejitas y cuernitos. Cierre frontal.',
+        image_url: 'assets/demo/luzyara/jirafa.jpg',
+        variants: [{ id: 'v-jir-s', size: 'S', stock: 6 }, { id: 'v-jir-m', size: 'M', stock: 10 }, { id: 'v-jir-l', size: 'L', stock: 5 }] },
+      { id: 'p-dino', category_id: 'c-dino', name: 'Pijama Dino Verde', price: 35500, sort: 6, active: true,
+        description: 'Pijama enterizo de polar verde y azul con capucha de dinosaurio y dientes de fieltro.',
+        image_url: 'assets/demo/luzyara/dino.jpg',
+        variants: [{ id: 'v-dino-s', size: 'S', stock: 8 }, { id: 'v-dino-m', size: 'M', stock: 7 }, { id: 'v-dino-l', size: 'L', stock: 4 }] }
     ]
   },
 

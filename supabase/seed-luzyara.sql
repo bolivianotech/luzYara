@@ -1,6 +1,6 @@
 -- ============================================================
 --  Datos iniciales de LuzYara (correr DESPUÉS de schema.sql)
---  Crea la tienda, sus categorías, 4 productos con talles S y M, y el admin.
+--  Crea la tienda, sus categorías, 6 productos con talles (S, M y en algunos L), y el admin.
 --  Es idempotente: si la tienda ya existe no duplica nada.
 --
 --  ANTES DE CORRER: cambiá el correo del dueño en la línea marcada con 👈
@@ -33,11 +33,13 @@ begin
   values (v_tenant, 'correo-del-dueño@gmail.com');   -- 👈 CAMBIAR por el correo real del dueño
 
   for r in select * from (values
-    (1, 'Osa Rosa',      '🩷', 'Pijama Osa Rosa',      'Pijama enterizo de polar suave. Capucha con orejitas de osa. Cierre frontal.', 'assets/demo/luzyara/osa.jpg',      32000, 8, 4),
-    (2, 'Oso Café',      '🤎', 'Pijama Oso Café',      'Pijama enterizo café chocolate. Capucha con cara de osito.',                  'assets/demo/luzyara/oso.jpg',      32500, 6, 2),
-    (3, 'Monstruo Rojo', '❤️', 'Pijama Monstruo Rojo', 'Pijama monstruo rojo con capucha de dientes. ¡El más divertido!',             'assets/demo/luzyara/monstruo.jpg', 33500, 0, 5),
-    (4, 'Pikachu',       '💛', 'Pijama Pikachu',       'Pijama Pikachu amarillo eléctrico. Orejas puntiagudas.',                      'assets/demo/luzyara/pikachu.jpg',  36500, 7, 3)
-  ) as t(sort, cat_name, emoji, prod_name, descr, img, price, stock_s, stock_m)
+    (1, 'Osa Rosa',      '🩷', 'Pijama Osa Rosa',      'Pijama enterizo de polar suave. Capucha con orejitas de osa. Cierre frontal.', 'assets/demo/luzyara/osa.jpg',      32000, 8, 4, null),
+    (2, 'Oso Café',      '🤎', 'Pijama Oso Café',      'Pijama enterizo café chocolate. Capucha con cara de osito.',                  'assets/demo/luzyara/oso.jpg',      32500, 6, 2, null),
+    (3, 'Monstruo Rojo', '❤️', 'Pijama Monstruo Rojo', 'Pijama monstruo rojo con capucha de dientes. ¡El más divertido!',             'assets/demo/luzyara/monstruo.jpg', 33500, 0, 5, null),
+    (4, 'Pikachu',       '💛', 'Pijama Pikachu',       'Pijama Pikachu amarillo eléctrico. Orejas puntiagudas.',                      'assets/demo/luzyara/pikachu.jpg',  36500, 7, 3, null),
+    (5, 'Jirafa',        '🦒', 'Pijama Jirafa',        'Pijama enterizo de polar con capucha de jirafa, orejitas y cuernitos. Cierre frontal.', 'assets/demo/luzyara/jirafa.jpg', 34500, 6, 10, 5),
+    (6, 'Dinosaurio',    '🦖', 'Pijama Dino Verde',    'Pijama enterizo de polar verde y azul con capucha de dinosaurio y dientes de fieltro.', 'assets/demo/luzyara/dino.jpg',   35500, 8, 7, 4)
+  ) as t(sort, cat_name, emoji, prod_name, descr, img, price, stock_s, stock_m, stock_l)
   loop
     insert into public.categories (tenant_id, name, emoji, sort)
     values (v_tenant, r.cat_name, r.emoji, r.sort) returning id into v_cat;
@@ -48,6 +50,9 @@ begin
     insert into public.variants (tenant_id, product_id, size, stock) values
       (v_tenant, v_prod, 'S', r.stock_s),
       (v_tenant, v_prod, 'M', r.stock_m);
+    if r.stock_l is not null then
+      insert into public.variants (tenant_id, product_id, size, stock) values (v_tenant, v_prod, 'L', r.stock_l);
+    end if;
   end loop;
 
   raise notice 'Tienda luzyara creada: %', v_tenant;

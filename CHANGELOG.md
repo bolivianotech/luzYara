@@ -3,6 +3,13 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) · Versionado: [SemVer](https://semver.org/lang/es/)
 (`MAYOR.MENOR.PARCHE`: MAYOR = cambio que rompe compatibilidad, MENOR = funcionalidad nueva, PARCHE = corrección).
 
+## [2.1.1] — 2026-09-27
+
+### Agregado
+- Catálogo de LuzYara: **Pijama Jirafa** ($ 34.500, talles S/M/L) y **Pijama Dino Verde** ($ 35.500, talles S/M/L),
+  con sus categorías 🦒 Jirafa y 🦖 Dinosaurio (demo y `supabase/seed-luzyara.sql`).
+- `assets/demo/CREDITOS.md`: origen y licencia de las fotos de ejemplo (Pexels).
+
 ## [2.1.0] — 2026-09-27
 
 Cierre del ciclo de compra/venta y separación real por tienda.
