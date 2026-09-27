@@ -1,0 +1,16 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+
+# Secretos locales (nunca subir claves service_role)
+.env
+.env.*
+*.local.js
+
+# Supabase CLI
+supabase/.temp/

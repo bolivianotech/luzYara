@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Backoffice</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- LOGIN (solo con Supabase) -->
+<div id="login-view" class="admin-shell" style="display:none; max-width:440px; padding-top:80px;">
+  <div class="card" style="padding:28px;">
+    <div style="font-size:40px;" data-brand="emoji">🛍️</div>
+    <h1 style="font-size:24px; font-weight:900; margin:8px 0 4px;">Backoffice <span data-brand="name"></span></h1>
+    <div id="login-form">
+      <p style="color:var(--text-sec); font-size:14px; font-weight:600; margin-bottom:20px;">Te enviamos un enlace de acceso a tu correo.</p>
+      <input id="login-email" type="email" placeholder="tu-correo@gmail.com" class="field" style="margin-bottom:12px;"
+        onkeydown="if(event.key==='Enter')sendLoginLink()">
+      <button class="btn btn-primary w-full" onclick="sendLoginLink()">Enviar enlace de acceso ✨</button>
+      <p id="login-status" class="hint" style="text-align:center; margin-top:12px;"></p>
+    </div>
+    <div id="login-denied" style="display:none;">
+      <p style="color:#ff3b30; font-weight:700; margin:12px 0;">Tu usuario (<span id="denied-email"></span>) no administra esta tienda.</p>
+      <button class="btn btn-soft w-full" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- BACKOFFICE -->
+<div id="admin-view" class="admin-shell" style="display:none;">
+  <div class="flex items-center justify-between gap-4 flex-wrap mb-6">
+    <div class="flex items-center gap-3">
+      <span style="font-size:36px;" data-brand="emoji">🛍️</span>
+      <div>
+        <h1 style="font-size:26px; font-weight:900; line-height:1.1;" data-brand="name">Tienda</h1>
+        <p style="color:var(--text-sec); font-weight:700; font-size:13px;">Backoffice · <span id="admin-user"></span></p>
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <span id="demo-switch" style="display:none;"></span>
+      <a id="store-link" href="index.html" target="_blank" class="btn btn-soft">Ver tienda ↗</a>
+      <button id="logout-btn" class="btn btn-soft" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <p id="demo-banner" class="card" style="display:none; background:#fff8e8; color:#7a4f00; font-weight:700; font-size:13px; margin-bottom:16px; padding:12px 16px;">
+    ⚠️ Modo demo: los cambios se guardan solo en este navegador. Conectá Supabase (docs/02-DESPLIEGUE.md) para operar de verdad.
+  </p>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="card"><p class="label">Prendas en stock</p><p id="kpi-units" class="text-3xl font-black">-</p></div>
+    <div class="card"><p class="label">Talles sin stock</p><p id="kpi-out" class="text-3xl font-black text-red-500">-</p></div>
+    <div class="card"><p class="label">Stock bajo</p><p id="kpi-low" class="text-3xl font-black text-orange-400">-</p></div>
+    <div class="card"><p class="label">Pedidos nuevos</p><p id="kpi-orders" class="text-3xl font-black" style="color:var(--blue);">-</p></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-2 mb-6 overflow-x-auto pb-1" id="admin-tabs">
+    <button class="pill-tab active" data-tab="inventory">📊 Inventario</button>
+    <button class="pill-tab" data-tab="products">👕 Productos</button>
+    <button class="pill-tab" data-tab="categories">🗂️ Categorías</button>
+    <button class="pill-tab" data-tab="orders">📋 Pedidos</button>
+    <button class="pill-tab" data-tab="config">⚙️ Configuración</button>
+  </div>
+
+  <!-- INVENTARIO -->
+  <section id="panel-inventory" class="tab-panel active">
+    <div class="card mb-6" style="padding:0; overflow:hidden;">
+      <div style="padding:16px 20px 0;"><h3 style="font-size:17px; font-weight:900;">Prendas disponibles por categoría</h3></div>
+      <div style="overflow-x:auto;"><table class="admin-table" id="inv-summary"></table></div>
+    </div>
+    <div class="flex gap-3 items-center flex-wrap mb-4">
+      <input id="inv-search" class="field" style="max-width:280px; padding:10px 14px;" placeholder="Buscar producto..." oninput="renderInventory()">
+      <div id="inv-filter" class="flex gap-2 overflow-x-auto"></div>
+    </div>
+    <p class="hint mb-3">Escribí la cantidad de cada talle y salí del casillero (Tab o clic afuera): se guarda solo.</p>
+    <div id="inv-groups"></div>
+  </section>
+
+  <!-- PRODUCTOS -->
+  <section id="panel-products" class="tab-panel">
+    <div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+      <h3 style="font-size:18px; font-weight:900;">Productos</h3>
+      <button class="btn btn-primary" onclick="openProductForm()">+ Nuevo producto</button>
+    </div>
+    <div id="products-list" class="products-grid"></div>
+  </section>
+
+  <!-- CATEGORÍAS -->
+  <section id="panel-categories" class="tab-panel">
+    <div class="card mb-4">
+      <h3 style="font-size:17px; font-weight:900; margin-bottom:12px;">Nueva categoría</h3>
+      <div class="flex gap-2 flex-wrap">
+        <input id="newcat-emoji" class="field" style="width:70px; text-align:center;" value="🏷️" maxlength="4" aria-label="Emoji">
+        <input id="newcat-name" class="field" style="flex:1; min-width:180px;" placeholder="Ej: Pijamas de verano" onkeydown="if(event.key==='Enter')addCategory()">
+        <button class="btn btn-primary" onclick="addCategory()">Agregar</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="overflow-x:auto;"><table class="admin-table" id="categories-table"></table></div>
+    </div>
+  </section>
+
+  <!-- PEDIDOS -->
+  <section id="panel-orders" class="tab-panel">
+    <div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+      <div id="orders-filter" class="flex gap-2 overflow-x-auto"></div>
+      <button class="btn btn-soft" onclick="loadOrders()">🔄 Actualizar</button>
+    </div>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="overflow-x:auto;"><table class="admin-table" id="orders-table"></table></div>
+    </div>
+  </section>
+
+  <!-- CONFIGURACIÓN -->
+  <section id="panel-config" class="tab-panel">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="card">
+        <h4 style="font-size:16px; font-weight:900; margin-bottom:16px;">🏬 Tienda</h4>
+        <div class="grid grid-cols-4 gap-3 mb-3">
+          <div class="col-span-3"><label class="label" for="cfg-name">Nombre</label><input id="cfg-name" class="field"></div>
+          <div><label class="label" for="cfg-emoji">Emoji</label><input id="cfg-emoji" class="field" maxlength="4" style="text-align:center;"></div>
+        </div>
+        <div class="mb-3"><label class="label" for="cfg-kicker">Texto chico del banner</label><input id="cfg-kicker" class="field"></div>
+        <div class="mb-3"><label class="label" for="cfg-title">Título del banner</label><input id="cfg-title" class="field"></div>
+        <div><label class="label" for="cfg-subtitle">Subtítulo del banner</label><textarea id="cfg-subtitle" rows="2" class="field" style="resize:none;"></textarea></div>
+      </div>
+
+      <div class="card">
+        <h4 style="font-size:16px; font-weight:900; margin-bottom:16px;">💬 WhatsApp que recibe los pedidos</h4>
+        <label class="label" for="cfg-whatsapp">Número</label>
+        <input id="cfg-whatsapp" type="tel" class="field" placeholder="+1 914 222 3263">
+        <p class="hint">Números de otro país: empezá con + y el código (ej. +1 914 222 3263). Del país de la tienda: código de área + número.</p>
+        <p id="cfg-whatsapp-preview" class="hint" style="color:var(--blue);"></p>
+        <button class="btn btn-wa mt-3" onclick="testWhatsApp()">Probar enlace</button>
+
+        <h4 style="font-size:16px; font-weight:900; margin:24px 0 12px;">💱 Moneda</h4>
+        <select id="cfg-currency" class="field" onchange="previewCurrency()"></select>
+        <p id="cfg-currency-preview" class="hint"></p>
+      </div>
+
+      <div class="card">
+        <h4 style="font-size:16px; font-weight:900; margin-bottom:6px;">📦 Venta por mayor</h4>
+        <p class="hint" style="margin-bottom:12px;">Cada forma de venta = cantidad de unidades del mismo producto y talle, con un % de descuento sobre el total.</p>
+        <div class="flex gap-2 flex-wrap mb-4">
+          <button class="btn btn-soft" style="font-size:12px;" onclick="packPreset('curva')">Curva x5 (Argentina)</button>
+          <button class="btn btn-soft" style="font-size:12px;" onclick="packPreset('docenas')">Media docena + Docena (Bolivia)</button>
+          <button class="btn btn-soft" style="font-size:12px;" onclick="packPreset('none')">Solo por unidad</button>
+        </div>
+        <div class="pack-row label" style="margin-bottom:4px;"><span>Nombre</span><span>Plural</span><span>Unidades</span><span>% desc.</span><span></span></div>
+        <div id="cfg-packs"></div>
+        <button class="btn btn-soft mt-2" style="font-size:12px;" onclick="addPackRow()">+ Agregar forma de venta</button>
+      </div>
+
+      <div class="card">
+        <h4 style="font-size:16px; font-weight:900; margin-bottom:16px;">📏 Talles y stock</h4>
+        <label class="label" for="cfg-sizes">Talles (separados por coma, en orden)</label>
+        <input id="cfg-sizes" class="field" placeholder="S, M, L, XL">
+        <p class="hint">Ej. ropa de niño: 2, 4, 6, 8, 10, 12, 14 · ropa de adulto: S, M, L, XL, XXL</p>
+        <label class="label mt-4" for="cfg-low">Avisar stock bajo cuando un talle tenga ≤</label>
+        <input id="cfg-low" type="number" min="0" class="field" style="max-width:140px;">
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-6 flex-wrap">
+      <button class="btn btn-primary" style="padding:14px 28px;" onclick="saveConfig()">Guardar configuración</button>
+      <button id="reset-demo-btn" class="btn btn-danger" style="display:none;" onclick="confirmClick(this, resetDemo)">Restablecer datos de demo</button>
+    </div>
+  </section>
+</div>
+
+<!-- FORMULARIO DE PRODUCTO -->
+<div id="product-form-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:760px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="pf-title" style="font-size:22px; font-weight:900;">Nuevo producto</h2>
+      <button onclick="closeModal('product-form-modal')" class="text-gray-400 hover:text-gray-600 text-2xl" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-5 gap-5">
+      <div class="sm:col-span-2">
+        <label class="label">Foto</label>
+        <div id="pf-dropzone" class="dropzone" onclick="$('pf-file').click()">
+          <div id="pf-drop-empty" style="text-align:center; padding:16px;">
+            <div style="font-size:36px;">📷</div>
+            <p style="font-weight:800; font-size:13px;">Tocá o arrastrá una foto</p>
+            <p class="hint">JPG, PNG o WEBP · se achica sola</p>
+          </div>
+          <img id="pf-preview" alt="" style="display:none;">
+        </div>
+        <input type="file" id="pf-file" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="pickProductPhoto(this.files[0])">
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-soft" style="flex:1; font-size:12px;" onclick="$('pf-file').click()">Cambiar foto</button>
+          <button class="btn btn-danger" style="font-size:12px;" onclick="clearProductPhoto()">Quitar</button>
+        </div>
+      </div>
+      <div class="sm:col-span-3" style="display:grid; gap:12px; align-content:start;">
+        <div><label class="label" for="pf-name">Nombre</label><input id="pf-name" class="field" placeholder="Ej: Pijama Osa Rosa"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="pf-category">Categoría</label><select id="pf-category" class="field"></select></div>
+          <div><label class="label" for="pf-price" id="pf-price-label">Precio por unidad</label><input id="pf-price" type="number" min="0" step="any" class="field" oninput="renderPackPreview()"></div>
+        </div>
+        <p id="pf-pack-preview" class="hint" style="color:#d6335a; margin-top:-4px;"></p>
+        <div><label class="label" for="pf-desc">Descripción</label><textarea id="pf-desc" rows="2" class="field" style="resize:none;"></textarea></div>
+        <div>
+          <label class="label">Talles y stock</label>
+          <div id="pf-sizes" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+          <p class="hint">Marcá los talles que vendés y cuántas prendas tenés de cada uno.</p>
+        </div>
+        <label class="flex items-center gap-2 font-bold text-sm"><input type="checkbox" id="pf-active"> Visible en la tienda</label>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6 flex-wrap">
+      <button id="pf-save" class="btn btn-primary" style="padding:14px 28px;" onclick="saveProductForm()">Guardar producto</button>
+      <button class="btn btn-soft" onclick="closeModal('product-form-modal')">Cancelar</button>
+      <button id="pf-delete" class="btn btn-danger" style="margin-left:auto;" onclick="confirmClick(this, deleteProductForm)">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cambio rápido de foto desde la lista -->
+<input type="file" id="quick-photo" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="quickPhotoPicked(this)">
+
+<script src="js/config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
