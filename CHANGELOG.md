@@ -3,6 +3,13 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) · Versionado: [SemVer](https://semver.org/lang/es/)
 (`MAYOR.MENOR.PARCHE`: MAYOR = cambio que rompe compatibilidad, MENOR = funcionalidad nueva, PARCHE = corrección).
 
+## [2.1.2] — 2026-09-27
+
+### Corregido
+- Modo demo: un navegador que ya había abierto la tienda seguía mostrando su copia guardada y no veía los
+  productos agregados después (ej. Jirafa y Dino). Ahora se suman solos, conservando pedidos y cambios de stock
+  de prueba (y sin volver a mostrar lo que se borró a propósito).
+
 ## [2.1.1] — 2026-09-27
 
 ### Agregado
